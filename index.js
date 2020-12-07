@@ -2,7 +2,7 @@
 /*
  * Express middleware for HTTPA sever-side support for static contents
  * Usage: 
- *  const httpa = require('httpa')(options);
+ *  const httpa = require('httpa-server')(options);
  *  app.use(httpa.static('static/dir', '/static'));
  * Options:
  *  key: /path/to/privatekey.pem (required)
