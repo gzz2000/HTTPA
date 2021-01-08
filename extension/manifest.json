@@ -1,0 +1,14 @@
+{
+    "name": "HTTPA Browser Support",
+    "version": "0.1.0",
+    "author": "Zizheng Guo",
+    "manifest_version": 2,
+    "permissions": [
+        "webRequest",
+        "webRequestBlocking",
+        "<all_urls>"
+    ],
+    "background": {
+        "scripts": ["background.js"]
+    }
+}
