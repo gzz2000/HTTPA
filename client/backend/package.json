@@ -11,5 +11,9 @@
     "url": "https://github.com/gzz2000/HTTPA/tree/master/client/backend"
   },
   "author": "GZZ",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "dependencies": {
+    "express": "^4.17.1",
+    "get-ssl-certificate": "^2.3.3"
+  }
 }
