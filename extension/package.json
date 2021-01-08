@@ -17,5 +17,11 @@
     "extension"
   ],
   "author": "GZZ",
-  "license": "UNLICENSED"
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "browserify": "^17.0.0"
+  },
+  "dependencies": {
+    "http-chrome": "^1.0.0"
+  }
 }
