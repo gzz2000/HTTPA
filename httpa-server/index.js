@@ -5,9 +5,9 @@
  *  const httpa = require('httpa-server')(options);
  *  app.use(httpa.static('static/dir', '/static'));
  * Options:
- *  key: /path/to/privatekey.pem (required)
+ *  key: fs.readFileSync('/path/to/privatekey.pem') (required)
  *      The HTTPS private key
- *  cert: /path/to/certificate.pem (required)
+ *  cert: fs.readFileSync('/path/to/certificate.pem') (required)
  *      The HTTPS certificate
  *  expire: 600000 (ms) (optional default to 10min)
  *      Signature expires after this much time
@@ -34,7 +34,7 @@ class Httpa
     constructor(options)
     {
         this._key = crypto.createPrivateKey(options.key);
-        this._cert = fsX.readFileSync(options.cert);
+        this._cert = options.cert;
         this._lifespan = options.expire || 10*60*1000; // default to 10 min
         this._hash = options.hash || 'sha256'; // default to sha256
         this._cache = {};
@@ -49,11 +49,13 @@ class Httpa
     get _makeCache()
     {
         return async (urlpath, filepath) => {
-            if(this._cache[filepath] && this._cache[filepath].wip)
-                return await this._cache[filepath].wait;
+            console.log('mkcache 0');
+            if(this._cache[urlpath] && this._cache[urlpath].wip)
+                return await this._cache[urlpath].wait;
+            console.log('mkcache 1');
             let callback = undefined;
             const cache = {modified: -1, wait: new Promise((resolve, reject) => {callback = resolve;}), wip: true, headers: {}};
-            this._cache[filepath] = cache;
+            this._cache[urlpath] = cache;
             cache.headers['Auth-Expire'] = Date.now()+this._lifespan;
             cache.headers['Auth-Type'] = this._hash;
             const sign = crypto.createSign(this._hash);
@@ -63,6 +65,7 @@ class Httpa
             cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
             cache.wip = false;
             callback();
+            console.log('mkcache 2');
         };
     };
     get static()
@@ -70,6 +73,7 @@ class Httpa
         return (filepath, loadpath) =>
         {
             loadpath = loadpath || '/';
+            filepath = path.isAbsolute(filepath) ? filepath : path.join(process.cwd(), filepath);
             return async (req, res, next) => {
                 try
                 {
@@ -78,9 +82,9 @@ class Httpa
                     {
                         return next();
                     }
-                    const rp = req.path;
+                    let rp = req.path;
                     const fp = path.join(filepath, path.relative(loadpath, rp));
-                    rp = `${req.host}|${rp}`;
+                    rp = `${req.hostname}|${rp}`;
                     let stat = undefined;
                     try
                     {
@@ -97,13 +101,17 @@ class Httpa
                     }else
                     {
                         if(!req.get('Auth-Require'))
-                            return res.redirect(301, `https://${req.get('host')}${req.baseUrl}`);
+                        {
+                            return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
+                        }
                         if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].expire < Date.now())
                         {
                             return await this._sendCached(res, fp, this._cache[rp]);
                         }else
                         {
+                            console.log('calling mkcache');
                             await this._makeCache(rp, fp);
+                            console.log('mkcache returned');
                             return await this._sendCached(res, fp, this._cache[rp]);
                         }
                     }
@@ -116,4 +124,6 @@ class Httpa
     };
 };
 
-module.exports = Httpa;
+module.exports = function (options) {
+    return new Httpa(options);
+};
