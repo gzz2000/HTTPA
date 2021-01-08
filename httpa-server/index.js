@@ -64,6 +64,7 @@ class Httpa
             sign.end();
             cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
             cache.wip = false;
+            cache.modified = (await fs.stat(filepath)).mtimeMs;
             callback();
             console.log('mkcache 2');
         };
