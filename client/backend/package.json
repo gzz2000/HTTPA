@@ -1,0 +1,15 @@
+{
+  "name": "httpa-client-backend",
+  "version": "0.1.0",
+  "description": "HTTPA client backend server. It receives forwarded HTTPA request, proxies it to the remote server, verify the signature of response, then send it back to the browser.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gzz2000/HTTPA/tree/master/client/backend"
+  },
+  "author": "GZZ",
+  "license": "UNLICENSED"
+}
