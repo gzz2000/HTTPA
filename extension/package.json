@@ -1,0 +1,21 @@
+{
+  "name": "httpa-browser-extension",
+  "version": "1.0.0",
+  "description": "Browser extension for HTTPA protocol handling. Take over requests that support HTTPA and serve them over built-in server.",
+  "main": "background.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "node build.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gzz2000/HTTPA/tree/master/extension"
+  },
+  "keywords": [
+    "protocol",
+    "httpa",
+    "extension"
+  ],
+  "author": "GZZ",
+  "license": "UNLICENSED"
+}
