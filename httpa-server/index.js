@@ -11,6 +11,8 @@
  *      The HTTPS certificate
  *  expire: 600000 (ms) (optional default to 10min)
  *      Signature expires after this much time
+ *  refresh: 480000 (ms) (optional default to 8 min)
+ *      Refresh the signature after this much time
  *  hash: 'sha256' (optional default to sha256)
  *      Hash algorithm used by the signature
  *  store: 'memory' (optional default to memory)
@@ -36,6 +38,7 @@ class Httpa
         this._key = crypto.createPrivateKey(options.key);
         this._cert = options.cert;
         this._lifespan = options.expire || 10*60*1000; // default to 10 min
+        this._refresh = options.refresh || 8*60*1000; // default to 8 min
         this._hash = options.hash || 'sha256'; // default to sha256
         this._cache = {};
     };
@@ -49,24 +52,22 @@ class Httpa
     get _makeCache()
     {
         return async (urlpath, filepath) => {
-            console.log('mkcache 0');
             if(this._cache[urlpath] && this._cache[urlpath].wip)
                 return await this._cache[urlpath].wait;
-            console.log('mkcache 1');
             let callback = undefined;
             const cache = {modified: -1, wait: new Promise((resolve, reject) => {callback = resolve;}), wip: true, headers: {}};
             this._cache[urlpath] = cache;
-            cache.headers['Auth-Expire'] = Date.now()+this._lifespan;
+            cache.birth = Date.now();
+            cache.headers['Auth-Expire'] = cache.birth+this._lifespan;
             cache.headers['Auth-Type'] = this._hash;
             const sign = crypto.createSign(this._hash);
             sign.update(`${urlpath}|${this._hash}|${cache.headers['Auth-Expire']}|`);
             sign.update(await fs.readFile(filepath));
             sign.end();
             cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
-            cache.wip = false;
             cache.modified = (await fs.stat(filepath)).mtimeMs;
+            cache.wip = false;
             callback();
-            console.log('mkcache 2');
         };
     };
     get static()
@@ -105,14 +106,12 @@ class Httpa
                         {
                             return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
                         }
-                        if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].expire < Date.now())
+                        if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].birth+this._refresh > Date.now())
                         {
                             return await this._sendCached(res, fp, this._cache[rp]);
                         }else
                         {
-                            console.log('calling mkcache');
                             await this._makeCache(rp, fp);
-                            console.log('mkcache returned');
                             return await this._sendCached(res, fp, this._cache[rp]);
                         }
                     }
