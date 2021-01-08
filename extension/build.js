@@ -1,14 +1,26 @@
 const browserify = require('browserify');
+const browserify_builtins = require('browserify/lib/builtins.js');
 const fs = require('fs');
+const mkdirp = require('mkdirp');
 
-if(!fs.existsSync(__dirname + '/build'))
-  fs.mkdirSync(__dirname + '/build');
+process.chdir(__dirname)
 
-browserify(__dirname + '/background.js', {debug: true})
+mkdirp.sync('build/backend')
+mkdirp.sync('build/client')
+
+browserify_builtins.http = require.resolve('http-chrome');
+browserify('backend.js', {debug: true})
   .bundle()
-  .pipe(fs.createWriteStream(__dirname + '/build/background.js', 'utf8'));
+  .pipe(fs.createWriteStream('build/backend/background.js', 'utf8'));
 
-fs.copyFileSync(__dirname + '/manifest.json',
-                __dirname + '/build/manifest.json');
+const fileToCopy = [
+  ['manifest-backend.json', 'build/backend/manifest.json'],
+  ['manifest-client.json', 'build/client/manifest.json'],
+  ['client.js', 'build/client/background.js']
+];
 
-console.log('Built successfully.')
+for(const [src, dest] of fileToCopy) {
+  fs.copyFileSync(src, dest);
+}
+
+console.log('Built successfully.');

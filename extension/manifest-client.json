@@ -1,13 +1,13 @@
 {
-  "name": "HTTPA Browser Support",
+  "name": "HTTPA Browser Activation Client",
   "version": "0.1.0",
   "author": "Zizheng Guo",
   "manifest_version": 2,
   "permissions": [
     "webRequest",
     "webRequestBlocking",
-    "<all_urls>",
-    "proxy"
+    "management",
+    "<all_urls>"
   ],
   "background": {
     "scripts": ["background.js"]

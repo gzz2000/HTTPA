@@ -19,7 +19,8 @@
   "author": "GZZ",
   "license": "UNLICENSED",
   "devDependencies": {
-    "browserify": "^17.0.0"
+    "browserify": "^17.0.0",
+    "mkdirp": "^1.0.4"
   },
   "dependencies": {
     "http-chrome": "^1.0.0"

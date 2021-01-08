@@ -1,0 +1,21 @@
+{
+  "name": "HTTPA Browser Backend",
+  "version": "0.1.0",
+  "author": "Zizheng Guo",
+  "manifest_version": 2,
+  "sockets": {
+    "udp": {"send": "*"},
+    "tcp": {"connect": "*"},
+    "tcpServer": {"listen": "*"}
+  },
+  "app": {
+    "background": {
+      "scripts": ["background.js"]
+    }
+  },
+  "permissions": [
+    "notifications",
+    "alarms",
+    "management"
+  ]
+}

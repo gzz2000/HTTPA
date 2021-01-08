@@ -1,4 +1,9 @@
 
+// keep the backend app alive
+setInterval(() => {
+  chrome.management.launchApp('jflbhgpnohinbehbcfljblnfjdinplom');
+}, 1000);
+
 function onBeforeRequest(req) {
   console.log("requesting: " + req.url, req);
   
