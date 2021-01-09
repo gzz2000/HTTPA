@@ -10,9 +10,11 @@ const fs = require('fs');
 const httpa = require('./index')({
   key: fs.readFileSync('../test/key.pem'),
   cert: fs.readFileSync('../test/certificate.pem'),
+  redir_https: false,
 });
 
 const app = express();
 
 app.use(httpa.static('../test/server-static', '/static'));
-app.listen(3000, () => console.log('test app listening at :3000'));
+app.listen(3000, () => console.log(`test app listening at :3000
+Start by navigating to http://localhost:3000/static/pku.png`));

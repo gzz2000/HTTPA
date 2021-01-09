@@ -9,6 +9,8 @@
  *      The HTTPS private key
  *  cert: fs.readFileSync('/path/to/certificate.pem') (required)
  *      The HTTPS certificate
+ *  redir_https: true (optional)
+ *      Whether to redirect to HTTPS if no Auth-Require is set.
  *  expire: 600000 (ms) (optional default to 10min)
  *      Signature expires after this much time
  *  refresh: 480000 (ms) (optional default to 8 min)
@@ -37,6 +39,8 @@ class Httpa
     {
         this._key = crypto.createPrivateKey(options.key);
         this._cert = options.cert;
+        this._redir_https = options.redir_https === undefined ?
+                            true : options.redir_https;
         this._lifespan = options.expire || 10*60*1000; // default to 10 min
         this._refresh = options.refresh || 8*60*1000; // default to 8 min
         this._hash = options.hash || 'sha256'; // default to sha256
@@ -102,10 +106,10 @@ class Httpa
                         return await res.sendFile(fp);
                     }else
                     {
-                      /* if(!req.get('Auth-Require'))
-                       * {
-                       *     return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
-                       * } */
+                        if(this._redir_https && !req.get('Auth-Require'))
+                        {
+                            return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
+                        }
                         if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].birth+this._refresh > Date.now())
                         {
                             return await this._sendCached(res, fp, this._cache[rp]);
