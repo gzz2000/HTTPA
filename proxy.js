@@ -81,7 +81,9 @@ class CachingProxy {
             {
                 return res.status(403).send('Please do not send https requests to http proxy.');
             }
-            console.log(`???${req.originalUrl}`);
+            console.log(`???${req.url}`);
+            console.log(`???${req.path}`);
+            console.log(`???${(new URL(req.originalUrl)).pathname}${(new URL(req.originalUrl)).search}`);
             // we use full url as key of cache
             const url = urlAssemble(req);
             req.yukiUrl = url;
