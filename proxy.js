@@ -3,7 +3,7 @@ const util = require('./util');
 const express = require('express');
 const http = require('http');
 
-const urlAssemble = req => `${req.protocol}://${req.get('host')}${req.originalUrl}`;
+const urlAssemble = req => req.originalUrl;
 
 
 // a simple caching http proxy

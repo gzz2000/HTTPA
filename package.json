@@ -1,7 +1,7 @@
 {
   "name": "httpa-proxy",
-  "version": "0.0.1",
-  "description": "A POC httpa proxy server.",
+  "version": "0.1.0",
+  "description": "A PoC httpa proxy server.",
   "main": "index.js",
   "scripts": {
     "test": "echo 'not implemented'",
@@ -22,6 +22,6 @@
   },
   "homepage": "https://github.com/gzz2000/HTTPA#readme",
   "dependencies": {
-    "http-proxy-middleware": "^1.0.6"
+    "express": "^4.17.1"
   }
 }
