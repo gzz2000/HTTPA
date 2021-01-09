@@ -14,8 +14,8 @@ class CachingProxy {
         this._defaultExpire = options.defaultExpire || 10*60*1000;
         this._httpCache = {};
         this.router = new express.Router();
-        this.router.use(this.pre);
-        this.router.use(this.send);
+        this.router.use('/', this.pre);
+        this.router.use('/', this.send);
     }
     async cacheIsExpired(cache)
     {
@@ -71,23 +71,6 @@ class CachingProxy {
         cache.wip = false;
         cache.birth = Date.now();
         cache.callback();
-    }
-    handleProxyRes(proxyRes, req, res)
-    {
-        const url = `${req.protocol}://${req.getHeader('host')}${req.path}`;
-        console.log(`ProxyRes url: ${url}`);
-        const headers = proxyRes.headers;
-        const update = !(this._httpCache[url] && this._httpCache[url].headers.etag === headers.etag);
-        if(update)
-        {
-            this.startCacheUpdate(url, headers);
-            proxyRes.on('data', chunk => {
-                this.dataCacheUpdate(url, chunk);
-            });
-            proxyRes.on('end', () => {
-                this.endCacheUpdate(url);
-            });
-        }
     }
     // Routine before sending request
     get pre()
