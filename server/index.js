@@ -1,3 +1,4 @@
+/* -*-  web-mode-code-indent-offset: 4; -*- */
 'use strict';
 /*
  * Express middleware for HTTPA sever-side support for static contents
@@ -22,12 +23,16 @@
  * Response headers in httpa:
  *  Auth-Enable: true (attached to all responses, not only httpa)
  *  Auth-Expire: timestamp in ms when the signature expire
- *  Auth-Type: hash algorithm used by the signature
+ *  Auth-Type: hash algorithm used by the signature. There are two kinds:
+ *    1. single,<hash>    eg. single-hash,sha256
+ *    2. merkle-tree,<block size>,<hash>    eg. merkle-tree,1024,sha256 (todo)
+ *  Auth-Digest: the hash of data payload
  *  Auth-Sign: the signature
  * Headers not present:
  *  Certificate: currently please use TLS handshake to get the certificate. Maybe add support later
  * Signed Data Format:
- *  {request host}|{request path}|{Auth-Type}|{Auth-Expire}|{response body}
+ *   (sorted by character, for later easy integration of additional HTTP headers)
+ *   {url}\r\nauth-digest: {digest}\r\nauth-expire: {expire}\r\nauth-type: {type}\r\n
  */ 
 const path = require('path');
 const fs = require('fs/promises');
@@ -43,7 +48,12 @@ class Httpa
                             true : options.redir_https;
         this._lifespan = options.expire || 10*60*1000; // default to 10 min
         this._refresh = options.refresh || 8*60*1000; // default to 8 min
-        this._hash = options.hash || 'sha256'; // default to sha256
+        const hash_settings = (options.hash || 'single,sha256').split(',');
+        if(hash_settings.length != 2 || hash_settings[0] != 'single') {
+            throw `Only single mode hash is supported at this moment`;
+        }
+        this._auth_type = hash_settings[0];
+        this._hash = hash_settings[1];
         this._cache = {};
     };
     get _sendCached()
@@ -64,9 +74,14 @@ class Httpa
             cache.birth = Date.now();
             cache.headers['Auth-Expire'] = cache.birth+this._lifespan;
             cache.headers['Auth-Type'] = this._hash;
+            const hash = crypto.createHash(this._hash);
+            hash.update(await fs.readFile(filepath));
+            cache.headers['Auth-Digest'] = hash.digest('base64');
             const sign = crypto.createSign(this._hash);
-            sign.update(`${urlpath}|${this._hash}|${cache.headers['Auth-Expire']}|`);
-            sign.update(await fs.readFile(filepath));
+            sign.update(`${urlpath}\r\n`);
+            for(const h of ['Auth-Digest', 'Auth-Expire', 'Auth-Type']) {
+                sign.update(`${h.toLowerCase()}: ${cache.headers[h]}\r\n`);
+            }
             sign.end();
             cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
             cache.modified = (await fs.stat(filepath)).mtimeMs;
@@ -88,9 +103,19 @@ class Httpa
                         return next();
                     }
                     res.append('Auth-Enable', true);
+                    if(this._auth_type == 'single') {
+                        res.append('Accept-Ranges', 'none');
+                    }
                     let rp = req.path;
                     const fp = path.join(filepath, path.relative(loadpath, rp));
-                    rp = `${req.hostname}|${rp}`;
+                    
+                    // rp = `${req.hostname}${rp}`; // deleted
+                    // No need to verify the host because that is checked
+                    // via the TLS certificate verification process.
+                    // (unless one tampers result from one subdomain to another
+                    // and those subdomains use the same certificate.)
+                    // this introduces convenience for implementation. 
+                    
                     let stat = undefined;
                     try
                     {
