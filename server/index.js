@@ -102,10 +102,10 @@ class Httpa
                         return await res.sendFile(fp);
                     }else
                     {
-                        if(!req.get('Auth-Require'))
-                        {
-                            return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
-                        }
+                      /* if(!req.get('Auth-Require'))
+                       * {
+                       *     return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
+                       * } */
                         if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].birth+this._refresh > Date.now())
                         {
                             return await this._sendCached(res, fp, this._cache[rp]);

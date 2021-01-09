@@ -4,12 +4,16 @@
   "description": "a test httpa server",
   "main": "index.js",
   "scripts": {
-    "test": "cat /dev/random"
+    "test": "node test.js"
   },
   "repository": {
     "type": "git",
     "url": "https://e.coding.net/yukimai/netlab/netlab.git"
   },
   "author": "Yukimai",
-  "license": "GPL-3.0-or-later"
+  "license": "GPL-3.0-or-later",
+  "devDependencies": {
+    "express": "^4.17.1"
+  },
+  "dependencies": {}
 }
