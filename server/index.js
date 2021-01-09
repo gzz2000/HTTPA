@@ -83,11 +83,11 @@ class Httpa
             return async (req, res, next) => {
                 try
                 {
-                    res.append('Auth-Enable', true);
                     if(!req.path.startsWith(loadpath))
                     {
                         return next();
                     }
+                    res.append('Auth-Enable', true);
                     let rp = req.path;
                     const fp = path.join(filepath, path.relative(loadpath, rp));
                     rp = `${req.hostname}|${rp}`;
