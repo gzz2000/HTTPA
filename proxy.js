@@ -14,8 +14,8 @@ class CachingProxy {
         this._defaultExpire = options.defaultExpire || 10*60*1000;
         this._httpCache = {};
         this.router = new express.Router();
-        this.router.use('/', this.pre);
-        this.router.use('/', this.send);
+        this.router.use(this.pre);
+        this.router.use(this.send);
     }
     async cacheIsExpired(cache)
     {
@@ -76,8 +76,12 @@ class CachingProxy {
     get pre()
     {
         return util.wrap(async (req, res, next) => {
-            // Phase 1: if req is https, let through
-            if(req.secure) return await next();
+            // Phase 1: if req is https, reject
+            if(req.secure)
+            {
+                return res.status(403).send('Please do not send https requests to http proxy.');
+            }
+            console.log(`???${req.originalUrl}`);
             // we use full url as key of cache
             const url = urlAssemble(req);
             req.yukiUrl = url;
