@@ -59,7 +59,7 @@ async function proxyHTTPA(res, req, host, port, path) {
       }
 
       try {
-        authVerifier = createAuthVerifier(response.headers, cert);
+        authVerifier = createAuthVerifier(path, response.headers, cert);
       }
       catch(e) {
         respondWithError(res, 525,

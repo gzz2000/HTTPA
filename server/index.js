@@ -16,16 +16,16 @@
  *      Signature expires after this much time
  *  refresh: 480000 (ms) (optional default to 8 min)
  *      Refresh the signature after this much time
- *  hash: 'sha256' (optional default to sha256)
- *      Hash algorithm used by the signature
+ *  auth_type: 'single,sha256' (optional default to single,sha256)
+ *      Hash algorithm used by the signature. There are two kinds:
+ *        1. single,<hash>    eg. single-hash,sha256
+ *        2. merkle-tree,<block size>,<hash>    eg. merkle-tree,1024,sha256 (todo)
  *  store: 'memory' (optional default to memory)
  *      Where to store the cached headers, currently memory-only
  * Response headers in httpa:
  *  Auth-Enable: true (attached to all responses, not only httpa)
  *  Auth-Expire: timestamp in ms when the signature expire
- *  Auth-Type: hash algorithm used by the signature. There are two kinds:
- *    1. single,<hash>    eg. single-hash,sha256
- *    2. merkle-tree,<block size>,<hash>    eg. merkle-tree,1024,sha256 (todo)
+ *  Auth-Type: hash algorithm used by the signature, same as auth_type
  *  Auth-Digest: the hash of data payload
  *  Auth-Sign: the signature
  * Headers not present:
@@ -48,12 +48,12 @@ class Httpa
                             true : options.redir_https;
         this._lifespan = options.expire || 10*60*1000; // default to 10 min
         this._refresh = options.refresh || 8*60*1000; // default to 8 min
-        const hash_settings = (options.hash || 'single,sha256').split(',');
-        if(hash_settings.length != 2 || hash_settings[0] != 'single') {
+        this._auth_type = options.auth_type || 'single,sha256';
+        this._auth_type_arr = this._auth_type.split(',');
+        if(this._auth_type_arr.length != 2 || this._auth_type_arr[0] != 'single') {
             throw `Only single mode hash is supported at this moment`;
         }
-        this._auth_type = hash_settings[0];
-        this._hash = hash_settings[1];
+        this._hash = this._auth_type_arr[this._auth_type_arr.length - 1];
         this._cache = {};
     };
     get _sendCached()
@@ -73,7 +73,7 @@ class Httpa
             this._cache[urlpath] = cache;
             cache.birth = Date.now();
             cache.headers['Auth-Expire'] = cache.birth+this._lifespan;
-            cache.headers['Auth-Type'] = this._hash;
+            cache.headers['Auth-Type'] = this._auth_type;
             const hash = crypto.createHash(this._hash);
             hash.update(await fs.readFile(filepath));
             cache.headers['Auth-Digest'] = hash.digest('base64');
@@ -103,7 +103,7 @@ class Httpa
                         return next();
                     }
                     res.append('Auth-Enable', true);
-                    if(this._auth_type == 'single') {
+                    if(this._auth_type_arr[0] == 'single') {
                         res.append('Accept-Ranges', 'none');
                     }
                     let rp = req.path;
