@@ -13,7 +13,6 @@
   "author": "GZZ",
   "license": "UNLICENSED",
   "dependencies": {
-    "express": "^4.17.1",
-    "get-ssl-certificate": "^2.3.3"
+    "express": "^4.17.1"
   }
 }
