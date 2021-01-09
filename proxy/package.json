@@ -1,0 +1,27 @@
+{
+  "name": "httpa-proxy",
+  "version": "0.1.0",
+  "description": "A PoC httpa proxy server.",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo 'not implemented'",
+    "start": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gzz2000/HTTPA.git"
+  },
+  "keywords": [
+    "httpa",
+    "proxy"
+  ],
+  "author": "Yukimai",
+  "license": "GPL-3.0-or-later",
+  "bugs": {
+    "url": "https://github.com/gzz2000/HTTPA/issues"
+  },
+  "homepage": "https://github.com/gzz2000/HTTPA#readme",
+  "dependencies": {
+    "express": "^4.17.1"
+  }
+}
