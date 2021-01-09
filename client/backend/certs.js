@@ -1,3 +1,12 @@
+/**
+ * @file certs.js
+ * @author Zizheng Guo
+ * @brief A simple cached SSL certificate pool
+ * @note Please note a potential performance issue, that the package
+   get-ssl-certificate always requests the homepage of a website,
+   which is unnecessary because we need no more than a handshake.
+ */
+
 const config = require('./config');
 const sslCertificate = require('get-ssl-certificate');
 

@@ -1,3 +1,9 @@
+/**
+ * @file index.js
+ * @author Zizheng Guo
+ * @brief Server entry point for local HTTPA backend.
+ */
+
 const http = require('http');
 const {getCerts} = require('./certs');
 const config = require('./config');
