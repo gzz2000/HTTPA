@@ -3,10 +3,8 @@ const util = require('./util');
 const express = require('express');
 const http = require('http');
 
-const urlAssemble = req => req.originalUrl;
 
-
-// a simple caching http proxy
+// a simple caching http proxy that supports httpa
 class CachingProxy {
     constructor(options)
     {
@@ -38,9 +36,6 @@ class CachingProxy {
     {
         let callback = undefined;
         const cache = {wip: true, finish: new Promise((res, rej) => {callback = err => {if(err)rej(err);else res();};})};
-        console.log(`startCacheUpdate: ${key}`);
-        console.log(`status: ${statusCode}`);
-        console.log(`headers: ${JSON.stringify(headers)}`);
         this._httpCache[key] = cache;
         cache.headers = headers;
         cache.body = [];
@@ -49,7 +44,6 @@ class CachingProxy {
     }
     dataCacheUpdate(key, chunk)
     {
-        console.log(`dataCacheUpdate: ${key}`);
         const cache = this._httpCache[key];
         if(!cache || !cache.wip)
         {
@@ -60,7 +54,6 @@ class CachingProxy {
     }
     endCacheUpdate(key)
     {
-        console.log(`endCacheUpdate: ${key}`);
         const cache = this._httpCache[key];
         if(!cache || !cache.wip)
         {
@@ -84,22 +77,18 @@ class CachingProxy {
             // we use full url as key of cache
             const url = new URL(req.originalUrl);
             req.yukiUrl = url;
-            console.log(`Pre url: ${url.href}`);
             if(this._httpCache[url.href])
             {
                 // Phase 2: if req is in cache and is expired, 
                 //  delete from cache and let through
                 if(await this.cacheIsExpired(this._httpCache[url.href]))
                 {
-                    console.log(`Pre: cache expired`);
                     delete this._httpCache[url.href];
                     return await next();
                 }
-                console.log(`Pre: sending cached`);
                 // Phase 3: Not expired. return cached content and stop processing
                 return await this.sendCache(res, this._httpCache[url.href]);
             }
-            console.log(`Pre: not cached`);
             // Phase 4: Not present in cache. let through
             return await next();
         });
@@ -134,11 +123,9 @@ class CachingProxy {
                 });
             });
             req.on('data', chunk => {
-                console.log('send on data');
                 httpReq.write(chunk);
             });
             req.on('end', () => {
-                console.log('send on end');
                 httpReq.end();
             });
             await p;

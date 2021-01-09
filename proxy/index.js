@@ -1,4 +1,8 @@
 'use strict';
+/*
+ * Usage: npm start
+ *  starts a http proxy on localhost:1080
+ */
 const express = require('express');
 const http = require('http');
 const proxy = require('./proxy')();
