@@ -81,26 +81,23 @@ class CachingProxy {
             {
                 return res.status(403).send('Please do not send https requests to http proxy.');
             }
-            console.log(`???${req.url}`);
-            console.log(`???${req.path}`);
-            console.log(`???${(new URL(req.originalUrl)).pathname}${(new URL(req.originalUrl)).search}`);
             // we use full url as key of cache
-            const url = urlAssemble(req);
+            const url = new URL(req.originalUrl);
             req.yukiUrl = url;
-            console.log(`Pre url: ${url}`);
-            if(this._httpCache[url])
+            console.log(`Pre url: ${url.href}`);
+            if(this._httpCache[url.href])
             {
                 // Phase 2: if req is in cache and is expired, 
                 //  delete from cache and let through
-                if(await this.cacheIsExpired(this._httpCache[url]))
+                if(await this.cacheIsExpired(this._httpCache[url.href]))
                 {
                     console.log(`Pre: cache expired`);
-                    delete this._httpCache[url];
+                    delete this._httpCache[url.href];
                     return await next();
                 }
                 console.log(`Pre: sending cached`);
                 // Phase 3: Not expired. return cached content and stop processing
-                return await this.sendCache(res, this._httpCache[url]);
+                return await this.sendCache(res, this._httpCache[url.href]);
             }
             console.log(`Pre: not cached`);
             // Phase 4: Not present in cache. let through
@@ -118,19 +115,21 @@ class CachingProxy {
                     else resolve();
                 };
             });
+            const url = req.yukiUrl;
             // send the request
             const httpReq = http.request({
                 headers: req.headers,
-                method: req.method
+                method: req.method,
+                path: `${url.pathname}${url.search}`
             }, httpRes => {
                 res.status(httpRes.statusCode);
                 res.set(httpRes.headers);
-                this.startCacheUpdate(req.yukiUrl, httpRes.statusCode, httpRes.headers);
+                this.startCacheUpdate(url.href, httpRes.statusCode, httpRes.headers);
                 httpRes.on('data', chunk => {
                     res.send(chunk);
-                    this.dataCacheUpdate(req.yukiUrl, chunk);
+                    this.dataCacheUpdate(url.href, chunk);
                 }).on('end', () => {
-                    this.endCacheUpdate(req.yukiUrl);
+                    this.endCacheUpdate(url.href);
                     callback();
                 });
             });
