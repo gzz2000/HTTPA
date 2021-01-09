@@ -59,11 +59,11 @@ async function proxyHTTPA(res, req, host, port, path) {
       }
 
       try {
-        authVerifier = createAuthVerifier(path, response.headers, cert);
+        authVerifier = createAuthVerifier(path, response.headers, cert, res);
       }
       catch(e) {
         respondWithError(res, 525,
-                         `AuthHandler creation failed: ${e}`);
+                         `AuthVerifier creation failed: ${e}`);
         request.destroy();
         reject(e);
         return;
@@ -71,9 +71,9 @@ async function proxyHTTPA(res, req, host, port, path) {
 
       authVerifier.on('end', () => resolve());
       
-      request.pipe(authHandler);
+      response.pipe(authVerifier);
 
-      authVerifier.on('autherror', e => {
+      authVerifier.on('error', e => {
         respondWithError(res, 525, e);
         request.destroy();
         reject(e);
