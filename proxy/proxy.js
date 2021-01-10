@@ -114,7 +114,7 @@ class CachingProxy {
                 res.set(httpRes.headers);
                 this.startCacheUpdate(url.href, httpRes.statusCode, httpRes.headers);
                 httpRes.on('data', chunk => {
-                    res.send(chunk);
+                    res.write(chunk);
                     this.dataCacheUpdate(url.href, chunk);
                 }).on('end', () => {
                     this.endCacheUpdate(url.href);
