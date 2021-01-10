@@ -106,10 +106,9 @@ class CachingProxy {
             });
             const url = req.yukiUrl;
             // send the request
-            const httpReq = http.request({
+            const httpReq = http.request(url, {
                 headers: req.headers,
                 method: req.method,
-                path: `${url.pathname}${url.search}`
             }, httpRes => {
                 res.status(httpRes.statusCode);
                 res.set(httpRes.headers);
