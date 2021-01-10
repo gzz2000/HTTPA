@@ -16,6 +16,8 @@ app.use((err, req, res, next) => {
     res.status(500).send();
 });
 
-server.listen(1080, () => {
-    console.log("Http Proxy listening on 1080...");
+const port = parseInt(process.argv[2] || 1080);
+
+server.listen(port, () => {
+    console.log(`Http Proxy listening on ${port}...`);
 });
