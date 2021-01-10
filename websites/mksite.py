@@ -9,18 +9,23 @@ subStatic = r'"../static/{}/\2?:HTTPA"'
 subDynamic = r'http\1://error\3'
 subOther = r'"'
 
+def copyhtml(inpath, oupath, sitename):
+    with open(inpath, 'r', encoding='utf-8') as hin, open(oupath, 'w', encoding='utf-8') as hout:
+        content = hin.read()
+        content = reOther.sub(subOther, content)
+        content = reStatic.sub(subStatic.format(sitename), content)
+        content = reDynamic.sub(subDynamic, content)
+        hout.write(content)
+def copy(inpath, oupath):
+     with open(inpath, 'rb') as fin, open(oupath, 'wb') as fout:
+        fout.write(fin.read())
 
 def main(sitename):
     os.mkdir(sitename)
     os.mkdir(os.path.join('./static', sitename))
     for fn in os.listdir('./download'):
         if fn.endswith('.html'):
-            with open(os.path.join('./download', fn), 'r', encoding='utf-8') as hin, open(os.path.join(sitename, 'index.html'), 'w', encoding='utf-8') as hout:
-                content = hin.read()
-                content = reOther.sub(subOther, content)
-                content = reStatic.sub(subStatic.format(sitename), content)
-                content = reDynamic.sub(subDynamic, content)
-                hout.write(content)
+            copyhtml(os.path.join('./download', fn), os.path.join(sitename, 'index.html'), sitename)
         else:
             curdir = os.path.join('./download', fn)
             for stn in os.listdir(curdir):
@@ -30,8 +35,13 @@ def main(sitename):
                 elif stn.endswith('.download'):
                     stn = stn[:-9]
                 oupath = os.path.join('./static', sitename, stn)
-                with open(inpath, 'rb') as fin, open(oupath, 'wb') as fout:
-                    fout.write(fin.read())
+                if inpath.endswith('.html'):
+                    try:
+                        copyhtml(inpath, oupath, sitename)
+                    except:
+                        copy(inpath, oupath)
+                else:
+                    copy(inpath, oupath)
 
 if __name__ == '__main__':
     if len(sys.argv) < 2:
