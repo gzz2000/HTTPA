@@ -9,6 +9,21 @@ const {getCerts} = require('./certs');
 const {respondWithError} = require('./error');
 const config = require('./config');
 const {createAuthVerifier} = require('./auth-verifier');
+const ProxyAgent = require('proxy-agent');
+
+// console.log(process.argv);
+function getAgent() {
+  if(process.argv.length === 3) {
+    console.log(`using proxy ${process.argv[2]}`);
+    return new ProxyAgent(process.argv[2]);
+  }
+  else {
+    console.log(`using direct connect`);
+    return null;
+  }
+}
+
+const requestAgent = getAgent();
 
 async function proxyHTTPA(res, req, host, port, path) {
   if(req.method != 'GET') {
@@ -23,7 +38,7 @@ async function proxyHTTPA(res, req, host, port, path) {
   catch(e) {
     respondWithError(res, 526, e);
   }
-  
+
   const request = http.request({
     hostname: host,
     port: port ? parseInt(port) : 80,
@@ -31,6 +46,7 @@ async function proxyHTTPA(res, req, host, port, path) {
     method: 'GET',
     headers: {'Auth-Require': 'true'},
     timeout: config.httpRequestTimeout,
+    agent: requestAgent,
   });
 
   let authVerifier = null;

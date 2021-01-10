@@ -13,6 +13,7 @@
   "author": "GZZ",
   "license": "UNLICENSED",
   "dependencies": {
-    "express": "^4.17.1"
+    "express": "^4.17.1",
+    "proxy-agent": "^4.0.0"
   }
 }
