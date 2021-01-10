@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+'''
+save a single website from chrome into ./download, then run this script
+'''
 import sys, os, re
 
 reStatic = re.compile(r'"\./([^/]+)/(.+?)"')
