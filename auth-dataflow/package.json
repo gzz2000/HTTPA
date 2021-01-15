@@ -1,0 +1,20 @@
+{
+  "name": "auth-dataflow",
+  "version": "1.0.0",
+  "description": "Protect your streamed content by hashes, verify partial content on-the-fly, and more!",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gzz2000/HTTPA/tree/master/client"
+  },
+  "keywords": [
+    "stream",
+    "authentication",
+    "crypto"
+  ],
+  "author": "Zizheng Guo",
+  "license": "MIT"
+}

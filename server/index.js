@@ -38,6 +38,8 @@ const path = require('path');
 const fs = require('fs/promises');
 const fsX = require('fs');
 const crypto = require('crypto');
+const {createAuthenticData, parseAuthRange} = require('./../auth-dataflow');
+
 class Httpa
 {
     constructor(options)
@@ -50,108 +52,109 @@ class Httpa
         this._refresh = options.refresh || 8*60*1000; // default to 8 min
         this._auth_type = options.auth_type || 'single,sha256';
         this._auth_type_arr = this._auth_type.split(',');
-        if(this._auth_type_arr.length != 2 || this._auth_type_arr[0] != 'single') {
-            throw `Only single mode hash is supported at this moment`;
-        }
         this._hash = this._auth_type_arr[this._auth_type_arr.length - 1];
         this._cache = {};
-    };
-    get _sendCached()
-    {
-        return async (res, filepath, cache) => {
-            res.set(cache.headers);
-            return await res.sendFile(filepath);
+    }
+    
+    async _sendCached(req, res, filepath, cache) {
+        res.set(cache.headers);
+        const stream = cache.authData.outputStream(
+            ...parseAuthRange(req.headers['auth-range'])
+        );
+        stream.pipe(res);
+    }
+    
+    async _makeCache(urlpath, filepath) {
+        if(this._cache[urlpath] && this._cache[urlpath].wip)
+            return await this._cache[urlpath].wait;
+        let callback = undefined;
+        const cache = {
+            modified: -1,
+            wait: new Promise((resolve, reject) => {callback = resolve;}),
+            wip: true,
+            headers: {},
+            authData: null,
         };
-    };
-    get _makeCache()
-    {
-        return async (urlpath, filepath) => {
-            if(this._cache[urlpath] && this._cache[urlpath].wip)
-                return await this._cache[urlpath].wait;
-            let callback = undefined;
-            const cache = {modified: -1, wait: new Promise((resolve, reject) => {callback = resolve;}), wip: true, headers: {}};
-            this._cache[urlpath] = cache;
-            cache.birth = Date.now();
-            cache.headers['Auth-Expire'] = cache.birth+this._lifespan;
-            cache.headers['Auth-Type'] = this._auth_type;
-            const hash = crypto.createHash(this._hash);
-            hash.update(await fs.readFile(filepath));
-            cache.headers['Auth-Digest'] = hash.digest('base64');
-            const sign = crypto.createSign(this._hash);
-            sign.update(`${urlpath}\r\n`);
-            for(const h of ['Auth-Digest', 'Auth-Expire', 'Auth-Type']) {
-                sign.update(`${h.toLowerCase()}: ${cache.headers[h]}\r\n`);
-            }
-            sign.end();
-            cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
-            cache.modified = (await fs.stat(filepath)).mtimeMs;
-            cache.wip = false;
-            callback();
-        };
-    };
-    get static()
-    {
-        return (filepath, loadpath) =>
-        {
-            loadpath = loadpath || '/';
-            filepath = path.isAbsolute(filepath) ? filepath : path.join(process.cwd(), filepath);
-            return async (req, res, next) => {
+        this._cache[urlpath] = cache;
+        cache.birth = Date.now();
+        cache.headers['Auth-Expire'] = cache.birth+this._lifespan;
+        cache.headers['Auth-Type'] = this._auth_type;
+        cache.authData = createAuthenticData(
+            {data: await fs.readFile(filepath)},
+            this._auth_type
+        );
+        cache.headers['Auth-Digest'] = cache.authData.hash.toString('base64');
+        const sign = crypto.createSign(this._hash);
+        sign.update(`${urlpath}\r\n`);
+        for(const h of ['Auth-Digest', 'Auth-Expire', 'Auth-Type']) {
+            sign.update(`${h.toLowerCase()}: ${cache.headers[h]}\r\n`);
+        }
+        sign.end();
+        cache.headers['Auth-Sign'] = sign.sign(this._key, 'base64');
+        cache.modified = (await fs.stat(filepath)).mtimeMs;
+        cache.wip = false;
+        callback();
+    }
+
+    static(filepath, loadpath) {
+        loadpath = loadpath || '/';
+        filepath = path.isAbsolute(filepath) ? filepath : path.join(process.cwd(), filepath);
+        return async (req, res, next) => {
+            try
+            {
+                if(!req.path.startsWith(loadpath))
+                    {
+                        return next();
+                    }
+                res.append('Auth-Enable', true);
+                if(this._auth_type_arr[0] == 'single') {
+                    res.append('Accept-Ranges', 'none');
+                }
+                let rp = req.path;
+                const fp = path.join(filepath, path.relative(loadpath, rp));
+                
+                // rp = `${req.hostname}${rp}`; // deleted
+                // No need to verify the host because that is checked
+                // via the TLS certificate verification process.
+                // (unless one tampers result from one subdomain to another
+                // and those subdomains use the same certificate.)
+                // this introduces convenience for implementation. 
+                
+                let stat = undefined;
                 try
                 {
-                    if(!req.path.startsWith(loadpath))
-                    {
-                        return next();
-                    }
-                    res.append('Auth-Enable', true);
-                    if(this._auth_type_arr[0] == 'single') {
-                        res.append('Accept-Ranges', 'none');
-                    }
-                    let rp = req.path;
-                    const fp = path.join(filepath, path.relative(loadpath, rp));
-                    
-                    // rp = `${req.hostname}${rp}`; // deleted
-                    // No need to verify the host because that is checked
-                    // via the TLS certificate verification process.
-                    // (unless one tampers result from one subdomain to another
-                    // and those subdomains use the same certificate.)
-                    // this introduces convenience for implementation. 
-                    
-                    let stat = undefined;
-                    try
-                    {
-                        stat = await fs.stat(fp);
-                        if(!stat.isFile())
-                            throw 1;
-                    }catch(e)
-                    {
-                        return next();
-                    }
-                    if(req.secure)
+                    stat = await fs.stat(fp);
+                    if(!stat.isFile())
+                        throw 1;
+                }catch(e)
+                {
+                    return next();
+                }
+                if(req.secure)
                     {
                         return await res.sendFile(fp);
                     }else
-                    {
-                        if(this._redir_https && !req.get('Auth-Require'))
+                {
+                    if(this._redir_https && !req.get('Auth-Require'))
                         {
                             return res.redirect(301, `https://${req.get('host')}${req.originalUrl}`);
                         }
-                        if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].birth+this._refresh > Date.now())
+                    if(this._cache[rp] && this._cache[rp].modified === stat.mtimeMs && this._cache[rp].birth+this._refresh > Date.now())
                         {
-                            return await this._sendCached(res, fp, this._cache[rp]);
+                            return await this._sendCached(req, res, fp, this._cache[rp]);
                         }else
-                        {
-                            await this._makeCache(rp, fp);
-                            return await this._sendCached(res, fp, this._cache[rp]);
-                        }
+                    {
+                        await this._makeCache(rp, fp);
+                        return await this._sendCached(req, res, fp, this._cache[rp]);
                     }
-                }catch(e)
-                {
-                    return next(e);
                 }
-            };
+            }catch(e)
+            {
+                return next(e);
+            }
         };
-    };
-};
+    }
+}
 
 module.exports = function (options) {
     return new Httpa(options);
