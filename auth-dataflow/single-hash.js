@@ -10,7 +10,9 @@ class SingleHash extends AuthenticData {
     super._prepData({data, length, hash, requestData});
     if(data) {
       this.status = createPromise(true);
-      this.hash = crypto.createHash(this.algorithm).update(data).digest();
+      this.hash = crypto
+        .createHash(this.algorithm)
+        .update(data).digest();
     }
     else {
       this.status = createPromise();
@@ -26,7 +28,7 @@ class SingleHash extends AuthenticData {
     const h = crypto.createHash(this.algorithm);
     const self = this;
     
-    return new stream.Writeable({
+    return new stream.Writable({
       write(chunk, encoding, cb) {
         const buf = chunkToBuffer(chunk, encoding);
         h.update(buf);
@@ -51,11 +53,11 @@ class SingleHash extends AuthenticData {
         }
         const inputHash = h.digest();
         if(!self.hash.equals(inputHash)) {
-          cb(new Error(`Hash incorrect: expected ${self.hash} but got ${inputHash}`));
+          cb(new Error(`Hash incorrect: expected ${self.hash.toString('hex')} but got ${inputHash.toString('hex')}`));
           return;
         }
-        this.data = Buffer.concat(recvBuffers);
-        this.status.resolve();
+        self.data = Buffer.concat(recvBuffers);
+        self.status.resolve();
         cb();
       }
     });
@@ -89,6 +91,7 @@ class SingleHash extends AuthenticData {
   }
 
   plainOutputStream(start, end) {
+    if(end === undefined) end = this.length;
     if(!(0 <= start && start <= end && end <= this.length)) {
       throw new Error(`Bad range`);
     }

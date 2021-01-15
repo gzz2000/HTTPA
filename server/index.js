@@ -32,7 +32,7 @@
  *  Certificate: currently please use TLS handshake to get the certificate. Maybe add support later
  * Signed Data Format:
  *   (sorted by character, for later easy integration of additional HTTP headers)
- *   {url}\r\nauth-digest: {digest}\r\nauth-expire: {expire}\r\nauth-type: {type}\r\n
+ *   {url}\r\nauth-content-length: {length}\r\nauth-digest: {digest}\r\nauth-expire: {expire}\r\nauth-type: {type}\r\n
  */ 
 const path = require('path');
 const fs = require('fs/promises');
@@ -83,10 +83,11 @@ class Httpa
             {data: await fs.readFile(filepath)},
             this._auth_type
         );
+        cache.headers['Auth-Content-Length'] = cache.authData.length;
         cache.headers['Auth-Digest'] = cache.authData.hash.toString('base64');
         const sign = crypto.createSign(this._hash);
         sign.update(`${urlpath}\r\n`);
-        for(const h of ['Auth-Digest', 'Auth-Expire', 'Auth-Type']) {
+        for(const h of ['Auth-Content-Length', 'Auth-Digest', 'Auth-Expire', 'Auth-Type']) {
             sign.update(`${h.toLowerCase()}: ${cache.headers[h]}\r\n`);
         }
         sign.end();

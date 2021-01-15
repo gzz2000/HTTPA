@@ -8,7 +8,7 @@ const http = require('http');
 const {getCerts} = require('./certs');
 const {respondWithError} = require('./error');
 const config = require('./config');
-const {createAuthVerifier} = require('./auth-verifier');
+const {createAuthDataflow} = require('./auth-verifier');
 const ProxyAgent = require('proxy-agent');
 
 // console.log(process.argv);
@@ -49,7 +49,6 @@ async function proxyHTTPA(res, req, host, port, path) {
     agent: requestAgent,
   });
 
-  let authVerifier = null;
   const requestPromise = new Promise((resolve, reject) => {
     request.on('timeout', () => {
       respondWithError(res, 524, `Timeout requesting ${path}.`);
@@ -74,8 +73,11 @@ async function proxyHTTPA(res, req, host, port, path) {
         return;
       }
 
+      let authDataflow = null;
       try {
-        authVerifier = createAuthVerifier(path, response.headers, cert, res);
+        authDataflow = createAuthDataflow(
+          response, path, cert
+        );
       }
       catch(e) {
         respondWithError(res, 525,
@@ -85,17 +87,24 @@ async function proxyHTTPA(res, req, host, port, path) {
         return;
       }
 
-      authVerifier.on('end', () => resolve());
+      const inputStream = authDataflow.inputStream(0);
+      const outputStream = authDataflow.plainOutputStream(0, undefined);
+      outputStream.on('end', () => resolve());
       
-      response.pipe(authVerifier);
-
-      authVerifier.on('error', e => {
+      outputStream.on('error', e => {
         respondWithError(res, 525, e);
         request.destroy();
         reject(e);
       });
-      
-      authVerifier.pipe(res);
+
+      inputStream.on('error', e => {
+        respondWithError(res, 525, e);
+        request.destroy();
+        reject(e);
+      });
+
+      response.pipe(inputStream);
+      outputStream.pipe(res);
     });
   });
 

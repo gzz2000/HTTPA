@@ -11,7 +11,7 @@ class AuthenticData {
   }
 
   // this can be called in subclass constructor
-  _prepData({data, length, hash}) {
+  _prepData({data, length, hash, requestData}) {
     if(data) {
       if(!(data instanceof Buffer)) {
         throw new Error(`data must be Buffer`);
