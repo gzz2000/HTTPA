@@ -9,7 +9,9 @@ const {getCerts} = require('./certs');
 const {respondWithError} = require('./error');
 const config = require('./config');
 const {createAuthDataflow} = require('./auth-verifier');
+const {parseAuthRange} = require('./../../auth-dataflow');
 const ProxyAgent = require('proxy-agent');
+const pump = require('pump');
 
 // console.log(process.argv);
 function getAgent() {
@@ -44,7 +46,10 @@ async function proxyHTTPA(res, req, host, port, path) {
     port: port ? parseInt(port) : 80,
     path,
     method: 'GET',
-    headers: {'Auth-Require': 'true'},
+    headers: {
+      'Auth-Require': 'true',
+      ...(req.headers['range'] ? {'Auth-Range': req.headers['range']} : {}),
+    },
     timeout: config.httpRequestTimeout,
     agent: requestAgent,
   });
@@ -87,24 +92,27 @@ async function proxyHTTPA(res, req, host, port, path) {
         return;
       }
 
-      const inputStream = authDataflow.inputStream(0);
-      const outputStream = authDataflow.plainOutputStream(0, undefined);
-      outputStream.on('end', () => resolve());
+      const inputStart = parseAuthRange(response.headers['auth-content-range'])[0];
+      const requestRange = parseAuthRange(req.headers['range']);
+      if(req.headers['range']) {
+        res.setHeader('Content-Range', `${requestRange[0]}-${requestRange[1]}`);
+        res.statusCode = 206;
+      }
       
-      outputStream.on('error', e => {
-        respondWithError(res, 525, e);
-        request.destroy();
-        reject(e);
+      const inputStream = authDataflow.inputStream(inputStart);
+      const outputStream = authDataflow.plainOutputStream(...requestRange);
+
+      pump(response, inputStream, e => {
+        if(e) {
+          respondWithError(res, 525, e);
+          reject(e);
+        }
       });
 
-      inputStream.on('error', e => {
-        respondWithError(res, 525, e);
-        request.destroy();
-        reject(e);
+      pump(outputStream, res, e => {
+        if(e) reject(e);
+        else resolve();
       });
-
-      response.pipe(inputStream);
-      outputStream.pipe(res);
     });
   });
 

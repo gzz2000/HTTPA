@@ -36,6 +36,11 @@ class AuthenticData {
       throw new Error(`Either data or length&&hash must be provided.`);
     }
   }
+
+  // input a range, output a superset that is accepted by outputStream.
+  getOutputRange(needStart, needEnd) {
+    throw new Error(`Not implemented`);
+  }
   
   outputStream(start, end) {
     throw new Error(`Not implemented`);

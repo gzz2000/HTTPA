@@ -38,6 +38,7 @@ const path = require('path');
 const fs = require('fs/promises');
 const fsX = require('fs');
 const crypto = require('crypto');
+const pump = require('pump');
 const {createAuthenticData, parseAuthRange} = require('./../auth-dataflow');
 
 class Httpa
@@ -56,12 +57,19 @@ class Httpa
         this._cache = {};
     }
     
-    async _sendCached(req, res, filepath, cache) {
+    _sendCached(req, res, filepath, cache) {
         res.set(cache.headers);
-        const stream = cache.authData.outputStream(
+        const [l, r] = cache.authData.getOutputRange(
             ...parseAuthRange(req.headers['auth-range'])
         );
-        stream.pipe(res);
+        res.setHeader('Auth-Content-Range', `${l}-${r}`);
+        const stream = cache.authData.outputStream(l, r);
+        return new Promise((resolve, reject) => {
+            pump(stream, res, e => {
+                if(e) reject(e);
+                else resolve();
+            });
+        });
     }
     
     async _makeCache(urlpath, filepath) {
@@ -108,9 +116,6 @@ class Httpa
                         return next();
                     }
                 res.append('Auth-Enable', true);
-                if(this._auth_type_arr[0] == 'single') {
-                    res.append('Accept-Ranges', 'none');
-                }
                 let rp = req.path;
                 const fp = path.join(filepath, path.relative(loadpath, rp));
                 

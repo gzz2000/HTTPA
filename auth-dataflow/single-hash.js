@@ -2,6 +2,7 @@ const {AuthenticData} = require('./base');
 const {createPromise, chunkToBuffer} = require('./utils');
 const crypto = require('crypto');
 const stream = require('stream');
+const assert = require('assert');
 
 class SingleHash extends AuthenticData {
   constructor({data, length, hash, requestData}, algorithm) {
@@ -63,11 +64,12 @@ class SingleHash extends AuthenticData {
     });
   }
 
+  getOutputRange(start, end) {
+    return [0, this.length];
+  }
+
   outputStream(start, end) {
-    if(end === undefined) end = this.length;
-    if(start !== 0 || end !== this.length) {
-      throw new Error(`SingleHash only supports full stream authentication`);
-    }
+    assert(start == 0 && end == this.length);
     // the output is the same as a plain output
     return this.plainOutputStream(start, end);
   }
@@ -75,7 +77,7 @@ class SingleHash extends AuthenticData {
   async _waitForDataReady() {
     if(!this.status.ready && this.requestData !== undefined && !this.requesting) {
       this.requesting = true;
-      const s = await this.requestData(0, self.length);
+      const s = await this.requestData(0, this.length);
       const is = this.inputStream(0);
       await new Promise((res, rej) => {
         is.on('error', e => {
@@ -93,7 +95,7 @@ class SingleHash extends AuthenticData {
   plainOutputStream(start, end) {
     if(end === undefined) end = this.length;
     if(!(0 <= start && start <= end && end <= this.length)) {
-      throw new Error(`Bad range`);
+      throw new Error(`Bad range: ${start}-${end}`);
     }
     
     const self = this;
@@ -102,7 +104,9 @@ class SingleHash extends AuthenticData {
     return new stream.Readable({
       async read(size) {
         try {
+          console.log('before wait for data ready');
           await self._waitForDataReady();
+          console.log('after wait for data ready');
         }
         catch(e) {
           this.destroy(e);
@@ -111,6 +115,7 @@ class SingleHash extends AuthenticData {
         const right = Math.min(end, p + size);
         if(right !== p) this.push(self.data.slice(p, right));
         p = right;
+        console.log(`Pushed to position ${p}/${self.length}`);
         if(p == self.length) this.push(null);
       }
     });

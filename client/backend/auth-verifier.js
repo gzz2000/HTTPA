@@ -11,9 +11,10 @@ const stream = require('stream');
 const {createAuthenticData, parseAuthRange} = require('./../../auth-dataflow');
 
 /**
- * @name createAuthVerifier
- * @brief verify the header signature, and create a stream transformer
-   for verifying the content checksum.
+ * @name createAuthDataflow
+ * @brief verify the header signature, and create a AuthenticData
+   for verifying the content checksum. (that can be used as an
+   advanced stream transformer)
  * @param path the path requested
  * @param headers the headers given by remote server
  * @param cert the .pem certificate data
