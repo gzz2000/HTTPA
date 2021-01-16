@@ -9,7 +9,7 @@ const {getCerts} = require('./certs');
 const {respondWithError} = require('./error');
 const config = require('./config');
 const {createAuthDataflow} = require('./auth-verifier');
-const {parseAuthRange} = require('./../../auth-dataflow');
+const {parseAuthRange, parseHTTPRange} = require('./../../auth-dataflow');
 const ProxyAgent = require('proxy-agent');
 const pump = require('pump');
 const throttledPump = require('./../../throttled-pump');
@@ -94,14 +94,17 @@ async function proxyHTTPA(res, req, host, port, path) {
       }
 
       const inputStart = parseAuthRange(response.headers['auth-content-range'])[0];
-      const requestRange = parseAuthRange(req.headers['range']);
-      if(req.headers['range']) {
-        res.setHeader('Content-Range', `${requestRange[0]}-${requestRange[1]}`);
-        res.statusCode = 206;
-      }
+      const requestRange = parseHTTPRange(req.headers['range']);
+      
       if(requestRange[1] !== undefined) ++requestRange[1]; // because http range is inclusive
       else requestRange[1] = parseInt(response.headers['auth-content-length']);
+      
+      if(requestRange[0] !== 0 || requestRange[1] !== undefined) {
+        res.setHeader('Content-Range', `${requestRange[0]}-${requestRange[1] - 1}/${response.headers['auth-content-length']}`);
+        res.statusCode = 206;
+      }
 
+      res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Length', requestRange[1] - requestRange[0]);
       console.log(`content-length=${requestRange[1] - requestRange[0]}`);
       

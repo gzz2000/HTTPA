@@ -14,10 +14,24 @@ function createAuthenticData(data, algo) {
   }
 }
 
+const regexpAuthRange = /^(?<l>[0-9]*)-(?<r>[0-9]*)$/;
+const regexpHTTPRange = /^bytes\=(?<l>[0-9]*)-(?<r>[0-9]*)$/;
+
 function parseAuthRange(s) {
   if(s === undefined) return [0, undefined];
-  s = s.split('-');
-return [parseInt(s[0]), s[1] ? parseInt(s[1]) : undefined];
+  const match = s.match(regexpAuthRange);
+  if(match === null) return [0, undefined];
+  return [match.groups.l ? parseInt(match.groups.l) : 0,
+          match.groups.r ? parseInt(match.groups.r) : undefined];
 }
 
-module.exports = {AuthenticData, SingleHash, createAuthenticData, parseAuthRange};
+function parseHTTPRange(s) {
+  if(s === undefined) return [0, undefined];
+  const match = s.match(regexpHTTPRange);
+  if(match === null) return [0, undefined];
+  return [match.groups.l ? parseInt(match.groups.l) : 0,
+          match.groups.r ? parseInt(match.groups.r) : undefined];
+}
+
+module.exports = {AuthenticData, SingleHash, createAuthenticData,
+                  parseAuthRange, parseHTTPRange};
