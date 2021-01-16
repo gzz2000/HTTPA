@@ -38,7 +38,7 @@ const path = require('path');
 const fs = require('fs/promises');
 const fsX = require('fs');
 const crypto = require('crypto');
-const pump = require('pump');
+const pump = require('./../throttled-pump');
 const {createAuthenticData, parseAuthRange} = require('./../auth-dataflow');
 
 class Httpa

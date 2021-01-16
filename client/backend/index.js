@@ -11,7 +11,7 @@ const config = require('./config');
 const {createAuthDataflow} = require('./auth-verifier');
 const {parseAuthRange} = require('./../../auth-dataflow');
 const ProxyAgent = require('proxy-agent');
-const pump = require('pump');
+const pump = require('./../../throttled-pump');
 
 // console.log(process.argv);
 function getAgent() {

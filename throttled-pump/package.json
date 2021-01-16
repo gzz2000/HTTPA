@@ -1,0 +1,24 @@
+{
+  "name": "throttled-pump",
+  "version": "1.0.0",
+  "description": "Throttle pumps by setting environment variables THROTTLE=<byte/s>",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gzz2000/HTTPA/tree/master/throttled-pump"
+  },
+  "keywords": [
+    "stream",
+    "pump",
+    "throttling"
+  ],
+  "author": "Zizheng Guo",
+  "license": "ISC",
+  "dependencies": {
+    "pump": "^3.0.0",
+    "stream-throttle": "^0.1.3"
+  }
+}
