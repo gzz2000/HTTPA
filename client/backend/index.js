@@ -11,7 +11,8 @@ const config = require('./config');
 const {createAuthDataflow} = require('./auth-verifier');
 const {parseAuthRange} = require('./../../auth-dataflow');
 const ProxyAgent = require('proxy-agent');
-const pump = require('./../../throttled-pump');
+const pump = require('pump');
+const throttledPump = require('./../../throttled-pump');
 
 // console.log(process.argv);
 function getAgent() {
@@ -98,6 +99,11 @@ async function proxyHTTPA(res, req, host, port, path) {
         res.setHeader('Content-Range', `${requestRange[0]}-${requestRange[1]}`);
         res.statusCode = 206;
       }
+      if(requestRange[1] !== undefined) ++requestRange[1]; // because http range is inclusive
+      else requestRange[1] = parseInt(response.headers['auth-content-length']);
+
+      res.setHeader('Content-Length', requestRange[1] - requestRange[0]);
+      console.log(`content-length=${requestRange[1] - requestRange[0]}`);
       
       const inputStream = authDataflow.inputStream(inputStart);
       const outputStream = authDataflow.plainOutputStream(...requestRange);
@@ -109,7 +115,7 @@ async function proxyHTTPA(res, req, host, port, path) {
         }
       });
 
-      pump(outputStream, res, e => {
+      throttledPump(outputStream, res, e => {
         if(e) reject(e);
         else resolve();
       });
