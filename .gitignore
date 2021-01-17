@@ -33,3 +33,7 @@
 
 # Node
 node_modules/
+
+# Large files in test static server.
+test/server-static/
+
