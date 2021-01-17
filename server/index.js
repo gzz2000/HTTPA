@@ -60,7 +60,7 @@ class Httpa
     _sendCached(req, res, filepath, cache) {
         res.set(cache.headers);
         const [l, r] = cache.authData.getOutputRange(
-            ...parseAuthRange(req.headers['auth-range'])
+            ...parseAuthRange(req.headers['auth-range'], cache.authData.length)
         );
         res.setHeader('Auth-Content-Range', `${l}-${r}`);
         const stream = cache.authData.outputStream(l, r);

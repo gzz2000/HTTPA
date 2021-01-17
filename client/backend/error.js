@@ -9,7 +9,7 @@ const errCodeToType = {
 };
 
 function respondWithError(res, code, msg) {
-  console.log(`respondWithError. ${code} ${msg}`);
+  // console.log(`respondWithError. ${code} ${msg}`);
   res.statusCode = code;
   res.end(`<html><body><h1>${code} ${errCodeToType[code]}</h1>
 <p>${msg || '(no information)'}</p></body></html>`);

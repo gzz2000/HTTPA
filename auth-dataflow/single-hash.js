@@ -93,7 +93,6 @@ class SingleHash extends AuthenticData {
   }
 
   plainOutputStream(start, end) {
-    if(end === undefined) end = this.length;
     if(!(0 <= start && start <= end && end <= this.length)) {
       throw new Error(`Bad range: ${start}-${end}`);
     }
@@ -104,9 +103,7 @@ class SingleHash extends AuthenticData {
     return new stream.Readable({
       async read(size) {
         try {
-          console.log('before wait for data ready');
           await self._waitForDataReady();
-          console.log('after wait for data ready');
         }
         catch(e) {
           this.destroy(e);

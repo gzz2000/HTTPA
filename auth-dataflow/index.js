@@ -17,20 +17,20 @@ function createAuthenticData(data, algo) {
 const regexpAuthRange = /^(?<l>[0-9]*)-(?<r>[0-9]*)$/;
 const regexpHTTPRange = /^bytes\=(?<l>[0-9]*)-(?<r>[0-9]*)$/;
 
-function parseAuthRange(s) {
-  if(s === undefined) return [0, undefined];
+function parseAuthRange(s, len) {
+  if(s === undefined) return [0, len];
   const match = s.match(regexpAuthRange);
-  if(match === null) return [0, undefined];
+  if(match === null) return [0, len];
   return [match.groups.l ? parseInt(match.groups.l) : 0,
-          match.groups.r ? parseInt(match.groups.r) : undefined];
+          match.groups.r ? parseInt(match.groups.r) : len];
 }
 
-function parseHTTPRange(s) {
-  if(s === undefined) return [0, undefined];
+function parseHTTPRange(s, len) {
+  if(s === undefined) return [0, len - 1];
   const match = s.match(regexpHTTPRange);
-  if(match === null) return [0, undefined];
+  if(match === null) return [0, len - 1];
   return [match.groups.l ? parseInt(match.groups.l) : 0,
-          match.groups.r ? parseInt(match.groups.r) : undefined];
+          match.groups.r ? parseInt(match.groups.r) : len - 1];
 }
 
 module.exports = {AuthenticData, SingleHash, createAuthenticData,
