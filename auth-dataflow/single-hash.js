@@ -89,11 +89,11 @@ class SingleHash extends AuthenticData {
   async _waitForDataReady() {
     if(!this.status.ready && this.requestData !== undefined && !this.inputStreamRunning) {
       const s = await this.requestData(0, this.length);
-      const is = this.inputStream(0);
+      const is = this.inputStream(0, this.length);
       await new Promise((res, rej) => {
         pump(s, is, e => {
           if(e) rej(e);
-          else res(e);
+          else res();
         });
       });
     }

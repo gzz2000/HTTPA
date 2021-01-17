@@ -11,6 +11,7 @@ const httpa = require('./index')({
   key: fs.readFileSync('../test/key.pem'),
   cert: fs.readFileSync('../test/certificate.pem'),
   redir_https: false,
+  auth_type: 'block,2048,sha256',
 });
 
 const app = express();

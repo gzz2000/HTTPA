@@ -1,5 +1,6 @@
 const {AuthenticData} = require('./base');
 const {SingleHash} = require('./single-hash');
+const {BlockHash} = require('./block-hash');
 const assert = require('assert');
 
 function createAuthenticData(data, algo) {
@@ -8,6 +9,10 @@ function createAuthenticData(data, algo) {
     case 'single':
       assert(arr.length == 2);
       return new SingleHash(data, arr[1]);
+
+    case 'block':
+      assert(arr.length == 3);
+      return new BlockHash(data, parseInt(arr[1]), arr[2]);
 
     default:
       throw new Error(`AuthenticData type ${arr[0]} not supported`);
