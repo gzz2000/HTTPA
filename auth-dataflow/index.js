@@ -31,11 +31,12 @@ function parseAuthRange(s, len) {
 }
 
 function parseHTTPRange(s, len) {
-  if(s === undefined) return [0, len - 1];
+  const defaultRight = (len === '' ? '' : len - 1);
+  if(s === undefined) return [0, defaultRight];
   const match = s.match(regexpHTTPRange);
-  if(match === null) return [0, len - 1];
+  if(match === null) return [0, defaultRight];
   return [match.groups.l ? parseInt(match.groups.l) : 0,
-          match.groups.r ? parseInt(match.groups.r) : len - 1];
+          match.groups.r ? parseInt(match.groups.r) : defaultRight];
 }
 
 module.exports = {AuthenticData, SingleHash, createAuthenticData,

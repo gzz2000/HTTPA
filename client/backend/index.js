@@ -42,6 +42,9 @@ async function proxyHTTPA(res, req, host, port, path) {
     respondWithError(res, 526, e);
   }
 
+  const requestRangeRaw = parseHTTPRange(req.headers['range'], '');
+  if(requestRangeRaw[1] !== '') ++requestRangeRaw[1];
+  
   const request = http.request({
     hostname: host,
     port: port ? parseInt(port) : 80,
@@ -49,7 +52,9 @@ async function proxyHTTPA(res, req, host, port, path) {
     method: 'GET',
     headers: {
       'Auth-Require': 'true',
-      ...(req.headers['range'] ? {'Auth-Range': req.headers['range']} : {}),
+      ...(req.headers['range'] ? {
+        'Auth-Range': `${requestRangeRaw[0]}-${requestRangeRaw[1]}`,
+      } : {}),
     },
     timeout: config.httpRequestTimeout,
     agent: requestAgent,

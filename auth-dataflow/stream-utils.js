@@ -58,7 +58,7 @@ class BufferedWritable extends stream.Writable {
   }
 
   async readData(len) {
-    // console.log(`try read data len=${len}`);
+    console.log(`try read data len=${len}`);
     if(this.eof) throw new Error('EOF');
     const buf = createPromise();
     this.recvBuffer = buf;
@@ -75,7 +75,7 @@ class BufferedWritable extends stream.Writable {
       const retBuf = Buffer.concat([...this.recvBuffers, buf.slice(0, len - this.lengthInBuffer)]);
       buf = buf.slice(len - this.lengthInBuffer);
       this.resetBuffer();
-      // console.log(`fulfilled ${len}`);
+      console.log(`fulfilled ${len}`);
       this.recvBuffer.resolve(retBuf);
       this.recvBuffer = null;
       return await this.processOneChunk(buf);
@@ -83,7 +83,7 @@ class BufferedWritable extends stream.Writable {
     else {
       this.recvBuffers.push(buf);
       this.lengthInBuffer += buf.length;
-      // console.log(`tot recv length=${this.lengthInBuffer}, need ${len}`);
+      console.log(`tot recv length=${this.lengthInBuffer}, need ${len}`);
     }
   }
 
