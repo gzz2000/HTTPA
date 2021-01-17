@@ -58,14 +58,14 @@ async function proxyHTTPA(res, req, host, port, path) {
   const requestPromise = new Promise((resolve, reject) => {
     request.on('timeout', () => {
       respondWithError(res, 524, `Timeout requesting ${path}.`);
-      request.destroy();
       reject('Timeout');
+      request.destroy();
     });
 
     request.on('error', e => {
       respondWithError(res, 500, `Request error: ${e}`);
-      request.destroy();
       reject(e);
+      request.destroy();
     })
 
     request.on('response', response => {
@@ -94,7 +94,7 @@ async function proxyHTTPA(res, req, host, port, path) {
       }
 
       const contentLength = parseInt(response.headers['auth-content-length']);
-      const inputStart = parseAuthRange(response.headers['auth-content-range'], contentLength)[0];
+      const inputRange = parseAuthRange(response.headers['auth-content-range'], contentLength);
       const requestRange = parseHTTPRange(req.headers['range'], contentLength);
 
       ++requestRange[1];
@@ -110,7 +110,7 @@ async function proxyHTTPA(res, req, host, port, path) {
       res.setHeader('Accept-Ranges', 'bytes');
       res.setHeader('Content-Length', requestRange[1] - requestRange[0]);
       
-      const inputStream = authDataflow.inputStream(inputStart);
+      const inputStream = authDataflow.inputStream(...inputRange);
       const outputStream = authDataflow.plainOutputStream(...requestRange);
 
       pump(response, inputStream, e => {

@@ -3,6 +3,7 @@ const {createPromise, chunkToBuffer} = require('./utils');
 const crypto = require('crypto');
 const stream = require('stream');
 const assert = require('assert');
+const pump = require('pump');
 
 class SingleHash extends AuthenticData {
   constructor({data, length, hash, requestData}, algorithm) {
@@ -18,23 +19,27 @@ class SingleHash extends AuthenticData {
     else {
       this.status = createPromise();
     }
+    this.inputStreamRunning = false;
   }
 
-  inputStream(start) {
-    if(start !== 0) {
+  inputStream(start, end) {
+    if(start !== 0 || end !== this.length) {
       throw new Error(`SingleHash only allows zero-started input stream.`);
     }
 
     const recvBuffers = [];
     const h = crypto.createHash(this.algorithm);
     const self = this;
+
+    this.inputStreamRunning = true;
     
     return new stream.Writable({
       write(chunk, encoding, cb) {
         const buf = chunkToBuffer(chunk, encoding);
         h.update(buf);
         recvBuffers.push(buf);
-        cb();
+        if(self.status.ready) cb(new Error(`done`));
+        else cb();
       },
 
       writev(chunks, cb) {
@@ -42,11 +47,18 @@ class SingleHash extends AuthenticData {
           const buf = chunkToBuffer(chunk, encoding);
           h.update(buf);
           recvBuffers.push(buf);
+          
+          if(self.status.ready) {
+            cb(new Error(`done`));
+            return;
+          }
         }
         cb();
       },
 
       final(cb) {
+        this.inputStreamRunning = false;
+        
         const len = recvBuffers.map(buf => buf.length).reduce((a, b) => a + b, 0);
         if(len != self.length) {
           cb(new Error(`Length mismatch: expected ${self.length} but got ${len}`));
@@ -75,19 +87,15 @@ class SingleHash extends AuthenticData {
   }
 
   async _waitForDataReady() {
-    if(!this.status.ready && this.requestData !== undefined && !this.requesting) {
-      this.requesting = true;
+    if(!this.status.ready && this.requestData !== undefined && !this.inputStreamRunning) {
       const s = await this.requestData(0, this.length);
       const is = this.inputStream(0);
       await new Promise((res, rej) => {
-        is.on('error', e => {
-          this.requesting = false;
-          this.rej(e);
+        pump(s, is, e => {
+          if(e) rej(e);
+          else res(e);
         });
-        is.on('finish', () => res());
-        s.pipe(is);
       });
-      this.requesting = false;
     }
     else await this.status;
   }

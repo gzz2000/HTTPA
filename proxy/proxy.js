@@ -1,140 +1,122 @@
 'use strict';
-const util = require('./util');
 const express = require('express');
 const http = require('http');
+const {createAuthenticData, parseAuthRange} = require('./../auth-dataflow');
+const pump = require('./../throttled-pump');
+const config = require('./config');
 
+const requiredHeaders = ['auth-content-length', 'auth-digest', 'auth-enable', 'auth-expire', 'auth-sign', 'auth-type'];
 
-// a simple caching http proxy that supports httpa
+function requestData(url, start, end) {
+  const req = http.request(url, {
+    headers: {
+      'Auth-Require': 'true',
+      'Auth-Range': `${start}-${end}`,
+    },
+    method: 'GET',
+    timeout: config.httpRequestTimeout,
+  });
+  return new Promise((resolve, reject) => {
+    req.on('timeout', () => {
+      reject('timeout');
+      req.destroy();
+    });
+
+    req.on('error', e => {
+      reject(e);
+    });
+
+    req.on('response', res => {
+      if(res.headers['auth-enable'] != 'true') {
+        reject('Bad server response: no auth-enable');
+        return;
+      }
+      
+      for(const h of requiredHeaders) {
+        if(!res.headers[h]) {
+          reject(`No ${h} in headers.`);
+          return;
+        }
+      }
+
+      // a proxy may or may not verify the signature and certificate.
+      // we just choose not to verify, and offload this to clients.
+      resolve(res);
+    });
+
+    req.end();
+  });
+}
+
+// a simple caching httpa proxy
 class CachingProxy {
-    constructor(options)
-    {
-        options = options || {};
-        this._defaultExpire = options.defaultExpire || 10*60*1000;
-        this._httpCache = {};
-        this.router = new express.Router();
-        this.router.use(this.pre);
-        this.router.use(this.send);
-    }
-    async cacheIsExpired(cache)
-    {
-        if(cache.wip) await cache.finish;
-        const expire = cache.headers['auth-expire'] || (cache.headers.expires ? Date.parse(cache.headers.expires) : cache.birth+this._defaultExpire);
-        return Date.now() > expire;
-    }
-    async sendCache(res, cache)
-    {
-        if(cache.wip)
-        {
-            // another routine is updating the cache. wait for it to finish
-            await cache.finish;
-        }
-        res.status(cache.status);
-        res.set(cache.headers);
-        return await res.send(cache.body);
-    }
-    startCacheUpdate(key, statusCode, headers)
-    {
-        let callback = undefined;
-        const cache = {wip: true, finish: new Promise((res, rej) => {callback = err => {if(err)rej(err);else res();};})};
-        this._httpCache[key] = cache;
-        cache.headers = headers;
-        cache.body = [];
-        cache.status = statusCode;
-        cache.callback = callback;
-    }
-    dataCacheUpdate(key, chunk)
-    {
-        const cache = this._httpCache[key];
-        if(!cache || !cache.wip)
-        {
-            console.log(`dataCacheUpdate ${key}: cache state error!`);
-            throw 1;
-        }
-        cache.body.push(chunk);
-    }
-    endCacheUpdate(key)
-    {
-        const cache = this._httpCache[key];
-        if(!cache || !cache.wip)
-        {
-            console.log(`endCacheUpdate ${key}: cache state error!`);
-            throw 1;
-        }
-        cache.body = Buffer.concat(cache.body);
-        cache.wip = false;
-        cache.birth = Date.now();
-        cache.callback();
-    }
-    // Routine before sending request
-    get pre()
-    {
-        return util.wrap(async (req, res, next) => {
-            // Phase 1: if req is https, reject
-            if(req.secure)
-            {
-                return res.status(403).send('Please do not send https requests to http proxy.');
-            }
-            // we use full url as key of cache
-            const url = new URL(req.originalUrl);
-            req.yukiUrl = url;
-            if(this._httpCache[url.href])
-            {
-                // Phase 2: if req is in cache and is expired, 
-                //  delete from cache and let through
-                if(await this.cacheIsExpired(this._httpCache[url.href]))
-                {
-                    delete this._httpCache[url.href];
-                    return await next();
-                }
-                // Phase 3: Not expired. return cached content and stop processing
-                return await this.sendCache(res, this._httpCache[url.href]);
-            }
-            // Phase 4: Not present in cache. let through
-            return await next();
+  constructor(options)
+  {
+    options = options || {};
+    this.cache = {};
+    this.router = new express.Router();
+    this.router.use(this.handler.bind(this));
+  }
+  
+  cacheIsExpired(cache)
+  {
+    const expire = cache.headers['auth-expire'] || cache.headers.expires;
+    if(expire) return Date.now() > expire; else return false;
+  }
+  async handler(req, res, next) {
+    try {
+      if(req.secure) {
+        return res.status(403).send('Please do not send https requests to http proxy.');
+      }
+      if(req.headers['auth-require'] !== 'true') {
+        return next();
+      }
+
+      const authRange = parseAuthRange(req.headers['auth-content-range']);
+      
+      const url = new URL(req.originalUrl);
+      if(!this.cache[url.href]) {
+        // boot cache: send a request
+        const response = await requestData(url.href, ...authRange);
+        
+        this.cache[url.href] = {
+          headers: response.headers,
+          authData: createAuthenticData({
+            length: parseInt(response.headers['auth-content-length']),
+            hash: Buffer.from(response.headers['auth-digest'], 'base64'),
+            requestData: (start, end) => requestData(url, start, end),
+          }, response.headers['auth-type'])
+        };
+
+        pump(response,
+             this.cache[url.href].authData.inputStream(
+               ...parseAuthRange(response.headers['auth-content-range'])));
+      }
+      const cache = this.cache[url.href];
+
+      for(const h of requiredHeaders) {
+        res.header(h, cache.headers[h]);
+      }
+      const [l, r] = cache.authData.getOutputRange(...authRange);
+      res.header('Auth-Content-Range', `${l}-${r}`);
+
+      const stream = cache.authData.outputStream(l, r);
+
+      return await new Promise((resolve, reject) => {
+        pump(stream, res, e => {
+          if(e) reject(e);
+          else resolve();
         });
+      });
     }
-    // Routine for sending the request
-    get send()
-    {
-        return util.wrap(async (req, res, next) => {
-            let callback = undefined;
-            const p = new Promise((resolve, reject) => {
-                callback = err => {
-                    if(err) reject(err);
-                    else resolve();
-                };
-            });
-            const url = req.yukiUrl;
-            // send the request
-            const httpReq = http.request(url, {
-                headers: req.headers,
-                method: req.method,
-            }, httpRes => {
-                res.status(httpRes.statusCode);
-                res.set(httpRes.headers);
-                this.startCacheUpdate(url.href, httpRes.statusCode, httpRes.headers);
-                httpRes.on('data', chunk => {
-                    res.write(chunk);
-                    this.dataCacheUpdate(url.href, chunk);
-                }).on('end', () => {
-                    this.endCacheUpdate(url.href);
-                    callback();
-                });
-            });
-            req.on('data', chunk => {
-                httpReq.write(chunk);
-            });
-            req.on('end', () => {
-                httpReq.end();
-            });
-            await p;
-            return await next();
-        });
+    catch(e) {
+      next(e);
     }
+  }
 };
 
 
 module.exports = function (options) {
-    const proxy = new CachingProxy(options);
-    return proxy.router;
+  const proxy = new CachingProxy(options);
+  return proxy.router;
 };

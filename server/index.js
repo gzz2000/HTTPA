@@ -28,6 +28,7 @@
  *  Auth-Type: hash algorithm used by the signature, same as auth_type
  *  Auth-Digest: the hash of data payload
  *  Auth-Sign: the signature
+ *  Auth-Content-Length; Auth-Content-Range.
  * Headers not present:
  *  Certificate: currently please use TLS handshake to get the certificate. Maybe add support later
  * Signed Data Format:
