@@ -72,17 +72,20 @@ class CachingProxy {
         return next();
       }
 
-      const authRange = parseAuthRange(req.headers['auth-content-range']);
+      const authRangeRaw = parseAuthRange(req.headers['auth-range'], '');
       
       const url = new URL(req.originalUrl);
+      let terminated = false;
+      
       if(!this.cache[url.href]) {
         // boot cache: send a request
-        const response = await requestData(url.href, ...authRange);
+        const response = await requestData(url.href, ...authRangeRaw);
+        const len = parseInt(response.headers['auth-content-length']);
         
         this.cache[url.href] = {
           headers: response.headers,
           authData: createAuthenticData({
-            length: parseInt(response.headers['auth-content-length']),
+            length: len,
             hash: Buffer.from(response.headers['auth-digest'], 'base64'),
             requestData: (start, end) => requestData(url, start, end),
           }, response.headers['auth-type'])
@@ -90,10 +93,14 @@ class CachingProxy {
 
         pump(response,
              this.cache[url.href].authData.inputStream(
-               ...parseAuthRange(response.headers['auth-content-range'])));
+               ...parseAuthRange(response.headers['auth-content-range'],
+                                 len),
+               () => terminated));
       }
       const cache = this.cache[url.href];
-
+      const authRange = parseAuthRange(req.headers['auth-range'],
+                                       cache.authData.length);
+      
       for(const h of requiredHeaders) {
         res.header(h, cache.headers[h]);
       }
@@ -104,7 +111,10 @@ class CachingProxy {
 
       return await new Promise((resolve, reject) => {
         pump(stream, res, e => {
-          if(e) reject(e);
+          if(e) {
+            reject(e);
+            terminated = true;
+          }
           else resolve();
         });
       });

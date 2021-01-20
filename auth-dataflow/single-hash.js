@@ -1,5 +1,6 @@
 const {AuthenticData} = require('./base');
 const {createPromise, chunkToBuffer} = require('./utils');
+const {DupInputError, ControlledTerminate, VerificationError} = require('./errors');
 const crypto = require('crypto');
 const stream = require('stream');
 const assert = require('assert');
@@ -24,7 +25,7 @@ class SingleHash extends AuthenticData {
 
   inputStream(start, end) {
     if(start !== 0 || end !== this.length) {
-      throw new Error(`SingleHash only allows zero-started input stream.`);
+      throw new RangeError(`SingleHash only allows zero-started input stream.`);
     }
 
     const recvBuffers = [];
@@ -49,7 +50,7 @@ class SingleHash extends AuthenticData {
           recvBuffers.push(buf);
           
           if(self.status.ready) {
-            cb(new Error(`done`));
+            cb(new DupInputError(`done`));
             return;
           }
         }
@@ -61,12 +62,12 @@ class SingleHash extends AuthenticData {
         
         const len = recvBuffers.map(buf => buf.length).reduce((a, b) => a + b, 0);
         if(len != self.length) {
-          cb(new Error(`Length mismatch: expected ${self.length} but got ${len}`));
+          cb(new VerificationError(`Length mismatch: expected ${self.length} but got ${len}`));
           return;
         }
         const inputHash = h.digest();
         if(!self.hash.equals(inputHash)) {
-          cb(new Error(`Hash incorrect: expected ${self.hash.toString('hex')} but got ${inputHash.toString('hex')}`));
+          cb(new VerificationError(`Hash incorrect: expected ${self.hash.toString('hex')} but got ${inputHash.toString('hex')}`));
           return;
         }
         self.data = Buffer.concat(recvBuffers);
@@ -102,7 +103,7 @@ class SingleHash extends AuthenticData {
 
   plainOutputStream(start, end) {
     if(!(0 <= start && start <= end && end <= this.length)) {
-      throw new Error(`Bad range: ${start}-${end}`);
+      throw new RangeError(`Bad range: ${start}-${end}`);
     }
     
     const self = this;
@@ -127,4 +128,4 @@ class SingleHash extends AuthenticData {
   }
 }
 
-module.exports = {SingleHash}
+module.exports = {SingleHash};

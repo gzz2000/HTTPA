@@ -1,9 +1,12 @@
 const {AuthenticData} = require('./base');
+const {DupInputError, ControlledTerminate, VerificationError} = require('./errors');
 const {createPromise, chunkToBuffer} = require('./utils');
 const {BufferedWritable, BufferedReadable} = require('./stream-utils');
 const {quickHash} = require('./crypto-utils');
 const crypto = require('crypto');
 const stream = require('stream');
+const pump = require('pump');
+const assert = require('assert');
 
 class BlockHash extends AuthenticData {
   constructor({data, length, hash, requestData}, bs, algorithm) {
@@ -13,7 +16,7 @@ class BlockHash extends AuthenticData {
     super._prepData({data, length, hash, requestData});
     this.nb = Math.ceil(this.length / this.bs);
     if(this.nb <= 1) {
-      throw new Error(`BlockHash assumes at least two blocks. file size ${this.length}, bs ${bs}.`);
+      throw new RangeError(`BlockHash assumes at least two blocks. file size ${this.length}, bs ${bs}.`);
     }
     
     this.blockHashes = Array.from({length: this.nb});
@@ -47,33 +50,51 @@ class BlockHash extends AuthenticData {
     }
   }
 
-  inputStream(start, end) {
+  // @param controlTerminate is optionally a synchronous function,
+  // indicating whether to exit the input stream at once.
+  
+  inputStream(start, end, controlTerminate) {
     if(!(0 <= start && start <= end && end <= this.length)) {
-      throw new Error(`inputStream range invalid: ${start}-${end}/${this.length}`);
+      throw new RangeError(`inputStream range invalid: ${start}-${end}/${this.length}`);
     }
     if(start % this.bs || (end % this.bs && end !== this.length)) {
-      throw new Error(`BlockHash only allows input streams starting at block boundary.`);
+      throw new RangeError(`BlockHash only allows input streams starting at block boundary.`);
     }
+    
     start /= this.bs;
     end = Math.ceil(end / this.bs);
+    controlTerminate ||= () => false;
+
+    if(this.status[start].ready || this.status[start].pending) {
+      throw new DupInputError(`inputStream meets duplicated block even at start=${start}`);
+    }
     
     const recvHashes = Array.from({length: this.nb});
     const expectSuffixHashes = Array.from({length: this.nb - 1});
-    const is = new BufferedWritable();
-    
     expectSuffixHashes[0] = this.hash;
+    
+    const is = new BufferedWritable();
+    let currentBlockId = null;
 
     (async () => {
 
       const bootHashes = Array.from({length: start + 2});
       const bootSuffixHashes = Array.from({length: start + 1});
-      for(let i = 0; i < start; ++i) {
-        bootHashes[i] = await is.readData(this.hash.length);
-      }
       
       for(let i = start; i < end; ++i) {
-        if(this.status[i].ready) {
-          throw new Error(`Position ${i} already cached, exiting this inputStream.`);
+        if(this.status[i].ready || this.status[i].pending) {
+          throw new DupInputError(`Block ${i} already resolved or claimed by other streams.`);
+        }
+        if(controlTerminate()) throw new ControlledTerminate;
+        
+        this.status[i].pending = true;
+        currentBlockId = i;
+
+        if(i === start) {
+          for(let i = 0; i < start; ++i) {
+            bootHashes[i] = await is.readData(this.hash.length);
+            if(controlTerminate()) throw new ControlledTerminate;
+          }
         }
 
         const bufLength = (i == this.nb - 1 ?
@@ -98,7 +119,7 @@ class BlockHash extends AuthenticData {
             );
           }
           if(!bootSuffixHashes[0].equals(this.hash)) {
-            throw new Error(`BlockHash inputStream boot failed: bad root hash. expected ${this.hash.toString('hex')}, got ${bootSuffixHashes[0].toString('hex')}`);
+            throw new VerificationError(`BlockHash inputStream boot failed: bad root hash. expected ${this.hash.toString('hex')}, got ${bootSuffixHashes[0].toString('hex')}`);
           }
           
           // passed
@@ -112,19 +133,25 @@ class BlockHash extends AuthenticData {
         else {
           const toCheck = nextSuffixHash ? quickHash(this.algorithm, [bufHash, nextSuffixHash]) : bufHash;
           if(!this.suffixHashes[i].equals(toCheck)) {
-            throw new Error(`BlockHash encounters mismatch at ${i}: expected ${this.suffixHashes[i].toString('hex')}, got ${toCheck.toString('hex')}`);
+            throw new VerificationError(`BlockHash encounters mismatch at ${i}: expected ${this.suffixHashes[i].toString('hex')}, got ${toCheck.toString('hex')}`);
           }
           this.blockHashes[i] = bufHash;
           if(nextSuffixHash) this.suffixHashes[i + 1] = nextSuffixHash;
         }
 
         this.dataArray[i] = buf;
+        console.log(`Resolving ${i}`);
         this.status[i].resolve();
       }
       
     })().catch(e => {
-      console.log(e);
+      console.log(`inputStream exited: ${e}`);
       is.destroy(e);
+      if(!(e instanceof DupInputError) && currentBlockId !== null) {
+        const oldPromise = this.status[currentBlockId];
+        this.status[currentBlockId] = createPromise();
+        oldPromise.reject(e);
+      }
     });
     
     return is;
@@ -138,21 +165,25 @@ class BlockHash extends AuthenticData {
     return [start, Math.min(end, this.length)];
   }
 
-  async _waitForDataReady(i, end) {
+  async _waitForDataReady(i, end, newStreamControlTerminate) {
     if(end === undefined) end = this.nb;
-    if(!this.status[i].ready && this.requestData !== undefined) {
-      let p = i;
-      while(p < end && !this.status[p].ready) ++p; // find a contiguous range of unfulfilled data
-      const s = await this.requestData(i * this.bs, (i + 1) * this.bs);
-      const is = this.inputStream(i * this.bs, (i + 1) * this.bs);
-      await new Promise((res, rej) => {
-        pump(s, is, e => {
-          if(e) rej(e);
-          else res();
-        });
-      });
+    if(this.status[i].ready) return;
+    else if(this.status[i].pending || !this.requestData) {
+      return await this.status[i];
     }
-    else await this.status[i];
+    // there's no current working request. so we create one.
+    // first decide the range extent of the request
+    let p = i;
+    while(p < end && !this.status[p].ready) ++p; // find a contiguous range of unfulfilled data
+    const content_l = i * this.bs;
+    const content_r = Math.min(p * this.bs, this.length);
+    console.log(`requesting new content ${content_l}-${content_r}`);
+    const s = await this.requestData(content_l, content_r);
+    
+    const is = this.inputStream(content_l, content_r, newStreamControlTerminate);
+    pump(s, is);
+    assert(this.status[i].pending);
+    return await this.status[i];
   }
 
   outputStream(start, end) {
@@ -160,18 +191,20 @@ class BlockHash extends AuthenticData {
       throw new Error(`outputStream range invalid: ${start}-${end}/${this.length}`);
     }
     if(start % this.bs || (end % this.bs && end !== this.length)) {
-      throw new Error(`BlockHash only allows output streams starting at block boundary.`);
+      throw new RangeError(`BlockHash only allows output streams starting at block boundary.`);
     }
 
     start /= this.bs;
     end = Math.ceil(end / this.bs);
 
     const os = new BufferedReadable();
+    let terminated = false;
+    const controlTerminate = () => terminated;
 
     (async () => {
       
       for(let i = start; i < end; ++i) {
-        await this._waitForDataReady(i, end);
+        await this._waitForDataReady(i, end, controlTerminate);
         if(i == start) {
           for(let j = 0; j < start; ++j)
             await os.writeData(this.blockHashes[j]);
@@ -182,6 +215,8 @@ class BlockHash extends AuthenticData {
       os.push(null);
       
     })().catch(e => {
+      console.log(`outputStream error: ${e}`);
+      terminated = true;
       os.destroy(e);
     });
     return os;
@@ -189,13 +224,15 @@ class BlockHash extends AuthenticData {
   
   plainOutputStream(start, end) {
     if(!(0 <= start && start <= end && end <= this.length)) {
-      throw new Error(`plainOutputStream range invalid: ${start}-${end}/${this.length}`);
+      throw new RangeError(`plainOutputStream range invalid: ${start}-${end}/${this.length}`);
     }
     let [l, r] = this.getOutputRange(start, end);
     l /= this.bs;
     r /= this.bs;
     
     const os = new BufferedReadable();
+    let terminated = false;
+    const controlTerminate = () => terminated;
 
     (async () => {
       
@@ -210,6 +247,8 @@ class BlockHash extends AuthenticData {
       os.push(null);
       
     })().catch(e => {
+      console.log(`plainOutputStream error: ${e}`);
+      terminated = true;
       os.destroy(e);
     });
     return os;
