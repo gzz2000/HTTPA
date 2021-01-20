@@ -14,7 +14,7 @@ class AuthenticData {
   _prepData({data, length, hash, requestData}) {
     if(data) {
       if(!(data instanceof Buffer)) {
-        throw new Error(`data must be Buffer`);
+        throw new TypeError(`data must be Buffer`);
       }
       this.data = data;
       this.length = data.length;
@@ -22,10 +22,10 @@ class AuthenticData {
     }
     else if(length && hash) {
       if(typeof length !== 'number') {
-        throw new Error(`length must be a number`);
+        throw new TypeError(`length must be a number`);
       }
       if(!(hash instanceof Buffer)) {
-        throw new Error(`hash must be a buffer. If it is encoded you must decode it first`);
+        throw new TypeError(`hash must be a buffer. If it is encoded you must decode it first`);
       }
       this.data = null;
       this.length = length;
@@ -33,7 +33,7 @@ class AuthenticData {
       this.requestData = requestData;
     }
     else {
-      throw new Error(`Either data or length&&hash must be provided.`);
+      throw new TypeError(`Either data or length&&hash must be provided.`);
     }
   }
 

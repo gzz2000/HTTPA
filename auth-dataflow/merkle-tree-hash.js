@@ -8,7 +8,7 @@ const stream = require('stream');
 const pump = require('pump');
 const assert = require('assert');
 
-class BlockHash extends AuthenticData {
+class MerkleTreeHash extends AuthenticData {
   constructor({data, length, hash, requestData}, bs, algorithm) {
     super();
     this.bs = bs;
@@ -16,37 +16,60 @@ class BlockHash extends AuthenticData {
     super._prepData({data, length, hash, requestData});
     this.nb = Math.ceil(this.length / this.bs);
     if(this.nb <= 1) {
-      throw new RangeError(`BlockHash assumes at least two blocks. file size ${this.length}, bs ${bs}.`);
+      throw new RangeError(`MerkleTreeHash assumes at least two blocks. file size ${this.length}, bs ${bs}.`);
     }
-    
-    this.blockHashes = Array.from({length: this.nb});
-    this.suffixHashes = Array.from({length: this.nb});
+
+    // binary tree constants
+    this.level = Math.ceil(Math.log2(this.nb));
+    this.baseLevelSize = Math.pow(2, this.level - 1);
+    this.extendLevelSize = 2 * (this.nb - this.baseLevelSize);
+    this.baseLevelLeavesStart = this.nb;
+    this.extendLevelLeavesStart = Math.pow(2, this.level);
+    this.treeSizeE = Math.pow(2, this.level) + this.extendLevelSize + 1;
+
+    console.log(`
+this.nb=${this.nb},
+level=${this.level},
+baseLevelSize=${this.baseLevelSize},
+extendLevelSize=${this.extendLevelSize},
+baseLevelLeavesStart=${this.baseLevelLeavesStart},
+extendLevelLeavesStart=${this.extendLevelLeavesStart}, 
+treeSizeE=${this.treeSizeE}
+`);
+
+    // tree of hashes
+    this.hashes = Array.from({length: this.treeSizeE});
     this.dataArray = Array.from({length: this.nb});
     
     if(this.data) {
       for(let i = 0; i < this.nb; ++i) {
         this.dataArray[i] = this.data.slice(i * this.bs, (i + 1) * this.bs);
-        this.blockHashes[i] = quickHash(
+        // console.log(`i=${i}, block=${this._block2node(i)}`);
+        this.hashes[this._block2node(i)] = quickHash(
           this.algorithm,
           [this.dataArray[i]]
         );
       }
       delete this.data;
-      
-      this.suffixHashes[this.nb - 1] = this.blockHashes[this.nb - 1];
-      for(let i = this.nb - 2; i >= 0; --i) {
-        this.suffixHashes[i] = quickHash(
+
+      for(let i = this.baseLevelLeavesStart - 1; i >= 1; --i) {
+        this.hashes[i] = quickHash(
           this.algorithm,
-          [this.blockHashes[i], this.suffixHashes[i + 1]]
+          [this.hashes[i << 1], this.hashes[i << 1 | 1]]
         );
       }
-      this.hash = this.suffixHashes[0];
+      this.hash = this.hashes[1];
       this.status = Array.from({length: this.nb}, () => createPromise(true));
     }
     else {
-      this.suffixHashes[0] = this.hash;
+      this.hashes[1] = this.hash;
       this.status = Array.from({length: this.nb}, () => createPromise());
     }
+  }
+
+  _block2node(bid) {
+    if(bid < this.extendLevelSize) return this.extendLevelLeavesStart + bid;
+    else return this.baseLevelLeavesStart + bid - this.extendLevelSize;
   }
 
   // @param controlTerminate is optionally a synchronous function,
@@ -68,18 +91,13 @@ class BlockHash extends AuthenticData {
       throw new DupInputError(`inputStream meets duplicated block even at start=${start}`);
     }
     
-    const recvHashes = Array.from({length: this.nb});
-    const expectSuffixHashes = Array.from({length: this.nb - 1});
-    expectSuffixHashes[0] = this.hash;
+    const recvHashes = Array.from({length: this.treeSizeE});
+    recvHashes[1] = this.hash;
     
     const is = new BufferedWritable();
     let currentBlockId = null;
 
     (async () => {
-
-      const bootHashes = Array.from({length: start + 2});
-      const bootSuffixHashes = Array.from({length: start + 1});
-      
       for(let i = start; i < end; ++i) {
         if(this.status[i].ready || this.status[i].pending) {
           throw new DupInputError(`Block ${i} already resolved or claimed by other streams.`);
@@ -89,56 +107,40 @@ class BlockHash extends AuthenticData {
         this.status[i].pending = true;
         currentBlockId = i;
 
-        if(i === start) {
-          for(let j = 0; j < start; ++j) {
-            bootHashes[j] = await is.readData(this.hash.length);
-            if(controlTerminate()) throw new ControlledTerminate;
-          }
-        }
-
         const bufLength = (i == this.nb - 1 ?
                            this.length - this.bs * (this.nb - 1) :
                            this.bs);
         const buf = await is.readData(bufLength);
-        const bufHash = quickHash(this.algorithm, [buf]);
-        const nextSuffixHash = (i == this.nb - 1) ? null : await is.readData(this.hash.length);
+        const nd = this._block2node(i);
+        const rhSandbox = [];  // temporary storage of unverified recvHashes.
         
-        if(i == start) {
-          bootHashes[i] = bufHash;
-          if(nextSuffixHash) {
-            bootSuffixHashes[i + 1] = nextSuffixHash;
-          }
-          else {
-            bootSuffixHashes[i] = bufHash;
-          }
-          for(let j = nextSuffixHash ? i : i - 1; j >= 0; --j) {
-            bootSuffixHashes[j] = quickHash(
-              this.algorithm,
-              [bootHashes[j], bootSuffixHashes[j + 1]]
-            );
-          }
-          if(!bootSuffixHashes[0].equals(this.hash)) {
-            throw new VerificationError(`BlockHash inputStream boot failed: bad root hash. expected ${this.hash.toString('hex')}, got ${bootSuffixHashes[0].toString('hex')}`);
-          }
-          
-          // passed
-          for(let j = 0; j <= start; ++j) {
-            this.blockHashes[j] = bootHashes[j];
-          }
-          for(let j = nextSuffixHash ? i + 1 : i; j >= 0; --j) {
-            this.suffixHashes[j] = bootSuffixHashes[j];
-          }
-        }
-        else {
-          const toCheck = nextSuffixHash ? quickHash(this.algorithm, [bufHash, nextSuffixHash]) : bufHash;
-          if(!this.suffixHashes[i].equals(toCheck)) {
-            throw new VerificationError(`BlockHash encounters mismatch at ${i}: expected ${this.suffixHashes[i].toString('hex')}, got ${toCheck.toString('hex')}`);
-          }
-          this.blockHashes[i] = bufHash;
-          if(nextSuffixHash) this.suffixHashes[i + 1] = nextSuffixHash;
-        }
+        recvHashes[nd] = quickHash(this.algorithm, [buf]);
+        rhSandbox.push([nd, recvHashes[nd]]);
 
+        for(let j = nd >> 1; j >= 1; j >>= 1) {
+          if(!recvHashes[j << 1]) {
+            recvHashes[j << 1] = await is.readData(this.hash.length);
+            rhSandbox.push([j << 1, recvHashes[j << 1]]);
+          }
+          if(!recvHashes[j << 1 | 1]) {
+            recvHashes[j << 1 | 1] = await is.readData(this.hash.length);
+            rhSandbox.push([j << 1 | 1, recvHashes[j << 1 | 1]]);
+          }
+          const h = quickHash(this.algorithm, [recvHashes[j << 1], recvHashes[j << 1 | 1]]);
+          if(recvHashes[j]) {
+            if(!h.equals(recvHashes[j])) {
+              throw new VerificationError(`Mismatch hash for tree node ${j}. expected ${recvHashes[j].toString('hex')}, got ${h.toString('hex')}`);
+            }
+            else break;
+          }
+          recvHashes[j] = h;
+          rhSandbox.push([j, h]);
+        }
+        
         this.dataArray[i] = buf;
+        for(const [id, h] of rhSandbox) {
+          this.hashes[id] = h;
+        }
         console.log(`Resolving ${i}`);
         this.status[i].resolve();
       }
@@ -190,7 +192,7 @@ class BlockHash extends AuthenticData {
       throw new Error(`outputStream range invalid: ${start}-${end}/${this.length}`);
     }
     if(start % this.bs || (end % this.bs && end !== this.length)) {
-      throw new RangeError(`BlockHash only allows output streams starting at block boundary.`);
+      throw new RangeError(`MerkleTreeHash only allows output streams starting at block boundary.`);
     }
 
     start /= this.bs;
@@ -201,15 +203,27 @@ class BlockHash extends AuthenticData {
     const controlTerminate = () => terminated;
 
     (async () => {
+      const tags = Array.from({length: this.treeSizeE}, () => false);
       
       for(let i = start; i < end; ++i) {
         await this._waitForDataReady(i, end, controlTerminate);
-        if(i == start) {
-          for(let j = 0; j < start; ++j)
-            await os.writeData(this.blockHashes[j]);
-        }
         await os.writeData(this.dataArray[i]);
-        if(i !== this.nb - 1) await os.writeData(this.suffixHashes[i + 1]);
+
+        const nd = this._block2node(i);
+        tags[1] = true;
+        tags[nd] = true;
+        for(let j = nd >> 1; j >= 1; j >>= 1) {
+          if(!tags[j << 1]) {
+            await os.writeData(this.hashes[j << 1]);
+            tags[j << 1] = true;
+          }
+          if(!tags[j << 1 | 1]) {
+            await os.writeData(this.hashes[j << 1 | 1]);
+            tags[j << 1 | 1] = true;
+          }
+          if(tags[j]) break;
+          tags[j] = true;
+        }
       }
       os.push(null);
       
@@ -254,4 +268,4 @@ class BlockHash extends AuthenticData {
   }
 }
 
-module.exports = {BlockHash};
+module.exports = {MerkleTreeHash};
