@@ -1,0 +1,19 @@
+{
+  "name": "profiler",
+  "version": "1.0.0",
+  "description": "TTFB Delay profiler for HTTP backend",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/gzz2000/HTTPA/tree/master/profiler"
+  },
+  "keywords": [
+    "HTTPA",
+    "experiments"
+  ],
+  "author": "Zizheng Guo",
+  "license": "ISC"
+}
